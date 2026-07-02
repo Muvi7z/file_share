@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:17.0-alpine3.20
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5439:5432"
+    env_file:
+      - path: ./.env
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - general
+volumes:
+  pg_data:
+
+networks:
+  general:
+    driver: bridge

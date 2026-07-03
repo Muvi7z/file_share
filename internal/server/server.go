@@ -50,7 +50,7 @@ func (s *Server) Register() {
 		{
 			videos.GET("/", s.videosHandler.GetAll)
 			videos.GET("/:videoId")
-			videos.GET("/:videoId/stream")
+			videos.GET("/:videoId/stream", s.videosHandler.VideoStream)
 			videos.GET("/:videoId/poster")
 
 		}

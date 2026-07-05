@@ -29,7 +29,7 @@ type VideoRow struct {
 
 const videosTable = "videos"
 
-func (r *Repository) GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error) {
+func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error) {
 	var whereMap sq.Sqlizer
 
 	if rootFolderId != "" {

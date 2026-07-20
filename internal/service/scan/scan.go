@@ -2,11 +2,11 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
 	"fmt"
 	"io/fs"
-	"log"
 	"math"
 	"path/filepath"
 	"strconv"
@@ -20,18 +20,71 @@ import (
 type repository interface {
 	GetAllScanJob(ctx context.Context, status string) ([]entity.ScanJob, error)
 	GetFolderById(ctx context.Context, id string) (entity.Folder, error)
+	CreateFolder(ctx context.Context, folder entity.Folder) (entity.Folder, error)
+	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
+	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
+}
+
+type scanJobRepository interface {
+	CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error)
+	GetScanJob(ctx context.Context, id string) (entity.ScanJob, error)
+	UpdateJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error)
+}
+
+type posterGenerator interface {
+	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId string) (entity.PosterFile, error)
+}
+
+var allowedVideoExts = map[string]bool{
+	".mp4":  true,
+	".avi":  true,
+	".mkv":  true,
+	".mov":  true,
+	".webm": true,
+	".flv":  true,
+	".wmv":  true,
+	".m4v":  true,
+	".mpeg": true,
+	".mpg":  true,
+	".3gp":  true,
+	".m3u8": true,
 }
 
 type Scan struct {
-	logger     deps.Logger
-	repository repository
+	logger            deps.Logger
+	repository        repository
+	scanJobRepository scanJobRepository
+	posterGenerator   posterGenerator
 }
 
-func New(logger deps.Logger, repository repository) *Scan {
+func New(logger deps.Logger, repository repository, scanJobRepository scanJobRepository, posterGenerator posterGenerator) *Scan {
 	return &Scan{
-		logger:     logger,
-		repository: repository,
+		logger:            logger,
+		repository:        repository,
+		scanJobRepository: scanJobRepository,
+		posterGenerator:   posterGenerator,
 	}
+}
+
+func (s *Scan) GetScanJob(ctx context.Context, id string) (entity.ScanJob, error) {
+	scanJob, err := s.scanJobRepository.GetScanJob(ctx, id)
+	if err != nil {
+		if errors.Is(err, entity.ErrorNotFoundScan) {
+			return entity.ScanJob{}, entity.ErrorNotFoundScan
+		}
+		return entity.ScanJob{}, entity.ErrorGetScanJob
+	}
+
+	return scanJob, nil
+}
+
+func (s *Scan) CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error) {
+	scan, err := s.scanJobRepository.CreateScanJob(ctx, job)
+	if err != nil {
+		return entity.ScanJob{}, entity.ErrorCreateScanJob
+	}
+
+	return scan, nil
 }
 
 func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration) {
@@ -57,12 +110,17 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 
 				folder, err = s.repository.GetFolderById(ctx, scanJob.FolderId)
 
-				err = s.ScanFolder(ctx, folder.Path)
+				err = s.ScanFolder(ctx, folder)
 				if err != nil {
-					return
+					continue
 				}
 
-				//сканировние
+				scanJob.Status = entity.StatusCompleted
+				scanJob.FinishedAt = time.Now()
+				_, err = s.scanJobRepository.UpdateJob(ctx, scanJob)
+				if err != nil {
+					continue
+				}
 
 				//создание папок или файлов
 
@@ -75,10 +133,10 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 	}()
 }
 
-func (s *Scan) ScanFolder(ctx context.Context, rootPath string) error {
+func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
 	folderMap := make(map[string]entity.Folder)
 
-	err := filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(rootFolder.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			s.logger.Error(ctx, fmt.Errorf("failed walk dir: %v", err))
 			return nil // Возвращаем nil, чтобы продолжить сканирование остальных файлов
@@ -86,6 +144,11 @@ func (s *Scan) ScanFolder(ctx context.Context, rootPath string) error {
 
 		// 2. Проверяем, является ли элемент директорией
 		if d.IsDir() {
+			if rootFolder.Path == path {
+				folderMap[path] = rootFolder
+
+				return nil
+			}
 			uuidFolder := uuid.New().String()
 
 			folder := entity.Folder{
@@ -102,9 +165,22 @@ func (s *Scan) ScanFolder(ctx context.Context, rootPath string) error {
 				LastScanAt:       time.Time{},
 			}
 
-			if rootPath == path {
-				folder.RootFolderId = uuidFolder
-				folder.IsRoot = true
+			parentPath := filepath.Dir(path)
+
+			parentFolder, ok := folderMap[parentPath]
+			if ok {
+				parentFolder.FilesCount++
+				parentFolder.ChildFolderCount++
+
+				folderMap[parentPath] = parentFolder
+
+				folder.ParentId = parentFolder.Id
+				folder.RootFolderId = rootFolder.Id
+			}
+			_, err = s.repository.CreateFolder(ctx, folder)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+				return err
 			}
 
 			folderMap[path] = folder
@@ -114,7 +190,8 @@ func (s *Scan) ScanFolder(ctx context.Context, rootPath string) error {
 			info, _ := d.Info()
 			data, err := ffprobe.GetProbeDataContext(ctx, path)
 			if err != nil {
-				log.Fatal("Ошибка получения данных:", err)
+				s.logger.Error(ctx, fmt.Errorf("failed walk dir: %v", err))
+				return nil
 			}
 
 			fileName := filepath.Base(path) // "my_video.mp4"
@@ -122,32 +199,37 @@ func (s *Scan) ScanFolder(ctx context.Context, rootPath string) error {
 			// 2. Получаем расширение
 			ext := filepath.Ext(fileName) // ".mp4"
 
+			if !allowedVideoExts[ext] {
+				return nil
+			}
+
 			// 3. Обрезаем расширение
 			nameWithoutExt := strings.TrimSuffix(fileName, ext)
 
 			uuidVideo := uuid.New().String()
+
+			video := entity.Video{
+				Id:         uuidVideo,
+				Title:      nameWithoutExt,
+				PosterUrl:  fmt.Sprintf("/api/videos/%s/poster", uuidVideo),
+				StreamUrl:  fmt.Sprintf("/api/videos/%s/stream", uuidVideo),
+				SizeBytes:  info.Size(),
+				Path:       path,
+				ModifiedAt: info.ModTime(),
+				Size:       data.Format.Size,
+			}
+
 			parentPath := filepath.Dir(path)
 
 			folder, ok := folderMap[parentPath]
-			if !ok {
+			if ok {
+				folder.VideosCount++
 
-			}
+				folderMap[parentPath] = folder
 
-			video := entity.Video{
-				Id:             uuidVideo,
-				Title:          nameWithoutExt,
-				FolderId:       folder.RootFolderId,
-				FolderName:     folder.Name,
-				ParentFolderId: folder.Id,
-				PosterUrl:      "",
-				StreamUrl:      "",
-				SizeBytes:      info.Size(),
-				Path:           path,
-				ModifiedAt:     info.ModTime(),
-				Duration:       "",
-				Codec:          "",
-				Resolution:     "",
-				Size:           data.Format.Size,
+				video.ParentFolderId = folder.Id
+				video.FolderName = folder.Name
+				video.FolderId = folder.Id
 			}
 
 			for _, stream := range data.Streams {
@@ -166,10 +248,40 @@ func (s *Scan) ScanFolder(ctx context.Context, rootPath string) error {
 				case "subtitle":
 				}
 			}
+
+			file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, path, uuidVideo)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
+				return err
+			}
+			err = file.Reader.Close()
+			if err != nil {
+				return err
+			}
+			_, err = s.repository.CreateVideo(ctx, video)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+				return err
+			}
+
 		}
 
 		return nil // Продолжаем обход
 	})
+
+	folder, ok := folderMap[rootFolder.Path]
+	if ok {
+		update := entity.UpdateFolderRequest{
+			FilesCount:       folder.FilesCount,
+			VideosCount:      folder.VideosCount,
+			ChildFolderCount: folder.ChildFolderCount,
+		}
+		_, err = s.repository.UpdateFolder(ctx, update, folder.Id)
+		if err != nil {
+			return err
+		}
+
+	}
 
 	if err != nil {
 		return err
@@ -182,8 +294,7 @@ func FormatDuration(totalSeconds int64) string {
 	h := totalSeconds / 3600
 	m := (totalSeconds % 3600) / 60
 	s := totalSeconds % 60
-
-	// %d   — часы без ведущего нуля (2, а не 02)
+	// %d — часы без ведущего нуля (2, а не 02)
 	// %02d — минуты и секунды с ведущим нулём (05, а не 5)
 	return fmt.Sprintf("%d:%02d:%02d", h, m, s)
 }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Local Video Vault API
   version: 1.0.0
-  description: API for a LAN video file manager. Folder is the single entity for both shared root paths and nested folders.
+  description: API for a LAN video file manager. Folder is the single entity for both shared root paths and nested folder.
 servers:
   - url: /api
     description: Same-origin backend used by the frontend.
@@ -67,8 +67,8 @@ paths:
   /folders:
     get:
       tags: [Folders]
-      summary: List folders visible to the current user.
-      description: Anonymous users receive public visible folders. Authorized users may receive extra fields or disabled folders according to backend roles.
+      summary: List folder visible to the current user.
+      description: Anonymous users receive public visible folder. Authorized users may receive extra fields or disabled folder according to backend roles.
       operationId: getFolders
       security:
         - {}
@@ -89,7 +89,7 @@ paths:
     post:
       tags: [Folders]
       summary: Add a root folder for scanning and viewing.
-      description: Requires a role that can manage folders. Files on disk are never created or deleted by this request.
+      description: Requires a role that can manage folder. Files on disk are never created or deleted by this request.
       operationId: createFolder
       security:
         - bearerAuth: []
@@ -122,7 +122,7 @@ paths:
     get:
       tags: [Folders]
       summary: List root file-browser entries.
-      description: Returns root folders visible to the current user. Non-video files must not be returned.
+      description: Returns root folder visible to the current user. Non-video files must not be returned.
       operationId: getRootFolderEntries
       security:
         - {}
@@ -160,7 +160,7 @@ paths:
     patch:
       tags: [Folders]
       summary: Update folder settings.
-      description: Requires a role that can manage folders.
+      description: Requires a role that can manage folder.
       operationId: updateFolder
       security:
         - bearerAuth: []
@@ -190,7 +190,7 @@ paths:
     delete:
       tags: [Folders]
       summary: Remove a root folder from viewing.
-      description: Requires a role that can manage folders. Deletes metadata from the app only; files on disk must not be deleted.
+      description: Requires a role that can manage folder. Deletes metadata from the app only; files on disk must not be deleted.
       operationId: deleteFolder
       security:
         - bearerAuth: []
@@ -208,7 +208,7 @@ paths:
   /folders/{folderId}/entries:
     get:
       tags: [Folders]
-      summary: List child folders and video files inside a folder.
+      summary: List child folder and video files inside a folder.
       operationId: getFolderEntries
       security:
         - {}
@@ -231,7 +231,7 @@ paths:
     post:
       tags: [Folders]
       summary: Queue folder rescan.
-      description: Requires a role that can manage folders.
+      description: Requires a role that can manage folder.
       operationId: rescanFolder
       security:
         - bearerAuth: []
@@ -279,7 +279,7 @@ paths:
   /videos:
     get:
       tags: [Videos]
-      summary: List videos visible to the current user.
+      summary: List video visible to the current user.
       operationId: getVideos
       security:
         - {}
@@ -570,7 +570,7 @@ components:
           example: null
         rootFolderId:
           type: string
-          description: For root folders this equals id. For nested folders this points to the root shared folder.
+          description: For root folder this equals id. For nested folder this points to the root shared folder.
           example: movies
         isRoot:
           type: boolean
@@ -578,22 +578,22 @@ components:
           example: true
         enabled:
           type: boolean
-          description: Usually meaningful for root folders; nested folders inherit visibility from their root.
+          description: Usually meaningful for root folder; nested folder inherit visibility from their root.
           example: true
         filesCount:
           type: integer
           minimum: 0
-          description: Total visible videos under this folder.
+          description: Total visible video under this folder.
           example: 42
         videoCount:
           type: integer
           minimum: 0
-          description: Direct child videos in this folder.
+          description: Direct child video in this folder.
           example: 3
         childFolderCount:
           type: integer
           minimum: 0
-          description: Direct child folders in this folder.
+          description: Direct child folder in this folder.
           example: 5
         lastScanAt:
           type: string
@@ -655,10 +655,10 @@ components:
           example: 1080p
         posterUrl:
           type: string
-          example: /api/videos/video-uuid/poster
+          example: /api/video/video-uuid/poster
         streamUrl:
           type: string
-          example: /api/videos/video-uuid/stream
+          example: /api/video/video-uuid/stream
         path:
           type: string
           example: D:\Video\Movies\Movie.mp4

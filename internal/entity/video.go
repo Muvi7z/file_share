@@ -18,3 +18,24 @@ type Video struct {
 	StreamUrl      string    `json:"streamUrl"`
 	Path           string    `json:"path"`
 }
+
+type VideoStream struct {
+	FileName string
+	Size     int64
+	ModTime  time.Time
+	Reader   ReadSeekCloser
+}
+
+type PosterFile struct {
+	FileName    string
+	ContentType string
+	ModTime     time.Time
+	Reader      ReadSeekCloser
+	Path        string
+}
+
+type ReadSeekCloser interface {
+	Read(p []byte) (n int, err error)
+	Seek(offset int64, whence int) (int64, error)
+	Close() error
+}

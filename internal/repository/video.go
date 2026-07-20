@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"file_share/internal/entity"
 	"fmt"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -27,22 +29,29 @@ type VideoRow struct {
 	Path           string    `db:"path"`
 }
 
-const videosTable = "videos"
+const videosTable = "video"
 
 func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error) {
 	var whereMap sq.Sqlizer
 
 	if rootFolderId != "" {
 		whereMap = sq.Eq{"folder_id": rootFolderId}
-
 	}
 
 	if parentFolderId != "" {
-		whereMap = sq.And{whereMap, sq.Eq{"folder_id": parentFolderId}}
+		if whereMap != nil {
+			whereMap = sq.And{whereMap, sq.Eq{"parent_folder_id": parentFolderId}}
+		} else {
+			whereMap = sq.Eq{"parent_folder_id": parentFolderId}
+		}
 	}
 
 	if query != "" {
-		whereMap = sq.And{whereMap, sq.Like{"title": "%" + query + "%"}}
+		if whereMap != nil {
+			whereMap = sq.And{whereMap, sq.Like{"title": "%" + query + "%"}}
+		} else {
+			whereMap = sq.Like{"title": "%" + query + "%"}
+		}
 
 	}
 
@@ -50,7 +59,6 @@ func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, paren
 		Columns("title", "folder_id", "folder_name", "parent_folder_id", "size", "size_bytes", "duration", "modified_at", "codec", "resolution", "poster_url", "stream_url", "path").
 		From(videosTable).
 		Where(whereMap).
-		Limit(limit).
 		Offset(offset).
 		ToSql()
 	if err != nil {
@@ -177,6 +185,9 @@ func (r *Repository) GetVideoById(ctx context.Context, id string) (entity.Video,
 
 	err = r.conn.GetContext(ctx, &row, sql, args...)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return entity.Video{}, entity.ErrorNotFoundVideo
+		}
 		return entity.Video{}, fmt.Errorf("error to executing query: %w", err)
 	}
 

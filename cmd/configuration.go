@@ -16,6 +16,7 @@ const (
 
 	envServerHost = "SERVER_HOST"
 	envServerPort = "SERVER_PORT"
+	envPosterDir  = "POSTER_DIR"
 )
 
 func newFromEnv() (*configuration, error) {
@@ -34,14 +35,15 @@ func newFromEnv() (*configuration, error) {
 		return nil, fmt.Errorf("error getting postgres host: %s", err)
 	}
 
-	pc.port, err = getIntValueFromEnv(envPostgresPort, 5432)
-	if err != nil {
-		return nil, fmt.Errorf("error getting postgres port: %s", err)
-	}
+	pc.port = getStringFromEnvOrDefault(envPostgresPort, "5432")
 
 	pc.password, err = getStringFromEnv(envPostgresPassword)
 	if err != nil {
 		return nil, fmt.Errorf("error getting postgres password: %s", err)
+	}
+	c.posterDir, err = getStringFromEnv(envPosterDir)
+	if err != nil {
+		return nil, fmt.Errorf("error getting poster dir: %s", err)
 	}
 
 	pc.sslmode = getStringFromEnvOrDefault(envPostgresSslMode, "disable")
@@ -80,12 +82,13 @@ func newFromEnv() (*configuration, error) {
 type configuration struct {
 	postgresConfiguration *postgresConfiguration
 	serverConfiguration   *serverConfiguration
+	posterDir             string
 }
 
 type postgresConfiguration struct {
 	db                 string
 	host               string
-	port               int64
+	port               string
 	user               string
 	password           string
 	sslmode            string
@@ -100,6 +103,9 @@ type serverConfiguration struct {
 
 func (c *configuration) GetPostgresConfiguration() *postgresConfiguration {
 	return c.postgresConfiguration
+}
+func (c *configuration) GetPosterDir() string {
+	return c.posterDir
 }
 
 func (pc *postgresConfiguration) GetConnectionString() string {

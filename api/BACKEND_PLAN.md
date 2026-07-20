@@ -693,8 +693,8 @@ Response `200`:
       "modifiedAt": "2026-06-17T12:00:00Z",
       "codec": "H.264",
       "resolution": "1080p",
-      "posterUrl": "/api/videos/video-1/poster",
-      "streamUrl": "/api/videos/video-1/stream",
+      "posterUrl": "/api/video/video-1/poster",
+      "streamUrl": "/api/video/video-1/stream",
       "path": "D:\\Video\\Movies\\Action\\Movie.mp4"
     }
   }
@@ -817,8 +817,8 @@ Response `200`:
     "modifiedAt": "2026-06-17T12:00:00Z",
     "codec": "H.264",
     "resolution": "1080p",
-    "posterUrl": "/api/videos/video-1/poster",
-    "streamUrl": "/api/videos/video-1/stream",
+    "posterUrl": "/api/video/video-1/poster",
+    "streamUrl": "/api/video/video-1/stream",
     "path": "D:\\Video\\Movies\\Action\\Movie.mp4"
   }
 ]

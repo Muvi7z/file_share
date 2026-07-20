@@ -1,6 +1,11 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"file_share/internal/deps"
+	"file_share/internal/handler/folder"
+	"file_share/internal/handler/scan"
 	videosHandler "file_share/internal/handler/videos"
 	"net/http"
 
@@ -8,16 +13,43 @@ import (
 )
 
 type Server struct {
-	router        *gin.Engine
 	videosHandler *videosHandler.Handler
+	folderHandler *folder.Handler
+	scanHandler   *scan.Handler
+	logger        deps.Logger
+	addr          string
+	server        *http.Server
 }
 
-func NewServer(router *gin.Engine, videosHandler *videosHandler.Handler) *Server {
-
-	return &Server{
+func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string) *Server {
+	s := &Server{
 		videosHandler: videosHandler,
-		router:        router,
+		folderHandler: folderHandler,
+		scanHandler:   scanHandler,
+		logger:        logger,
+		addr:          addr,
 	}
+
+	router := s.Register(gin.Default())
+
+	s.server = &http.Server{
+		Addr:    s.addr,
+		Handler: router,
+	}
+
+	return s
+}
+
+func (s *Server) Run(ctx context.Context) {
+	s.logger.Info(ctx, "server starting", "address", s.addr)
+
+	if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.logger.Error(ctx, err)
+	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.server.Shutdown(ctx)
 }
 
 func LiberalCORS(c *gin.Context) {
@@ -33,10 +65,9 @@ func LiberalCORS(c *gin.Context) {
 	}
 }
 
-func (s *Server) Register() {
-	s.router.Use(LiberalCORS)
-
-	api := s.router.Group("/api")
+func (s *Server) Register(router *gin.Engine) *gin.Engine {
+	router.Use(LiberalCORS)
+	api := router.Group("/api")
 	{
 		api.GET("/health")
 
@@ -49,9 +80,9 @@ func (s *Server) Register() {
 		videos := api.Group("/videos")
 		{
 			videos.GET("/", s.videosHandler.GetAll)
-			videos.GET("/:videoId")
-			videos.GET("/:videoId/stream", s.videosHandler.VideoStream)
-			videos.GET("/:videoId/poster")
+			videos.GET("/:videoId", s.videosHandler.GetVideo)
+			videos.GET("/:videoId/stream", s.videosHandler.Stream)
+			videos.GET("/:videoId/poster", s.videosHandler.GetPoster)
 
 		}
 
@@ -62,16 +93,18 @@ func (s *Server) Register() {
 
 		folders := api.Group("/folders")
 		{
-			folders.GET("/")
-			folders.POST("/")
-			folders.GET("/:folderId")
-			folders.GET("/root/entries")
-			folders.PATCH("/:folderId")
-			folders.DELETE("/:folderId")
-			folders.GET("/:folderId/entries")
-			folders.GET("/:folderId/rescan")
+			folders.GET("/", s.folderHandler.GetAll)
+			folders.POST("/", s.folderHandler.CreateRootFolder)
+			folders.GET("/:folderId", s.folderHandler.GetFolder)
+			folders.GET("/root/entries", s.folderHandler.GetRootFolderEntries)
+			folders.PATCH("/:folderId", s.folderHandler.UpdateFolder)
+			folders.DELETE("/:folderId", s.folderHandler.DeleteFolder)
+			folders.GET("/:folderId/entries", s.folderHandler.GetFoldersEntries)
+			folders.GET("/:folderId/rescan", s.folderHandler.FolderRescan)
 		}
 
-		api.GET("/scan-jobs/:jobId")
+		api.GET("/scan-jobs/:jobId", s.scanHandler.GetScanJob)
 	}
+
+	return router
 }

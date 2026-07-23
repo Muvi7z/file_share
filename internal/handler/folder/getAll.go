@@ -1,4 +1,4 @@
-package folders
+package folder
 
 import (
 	"net/http"
@@ -13,7 +13,7 @@ func (h *Handler) GetAll(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	folders, err := h.folderService.GetAll(ctx, rootFolderId, parentFolderId, query)
+	folders, err := h.folderService.GetFolders(ctx, rootFolderId, parentFolderId, query, nil)
 	if err != nil {
 		h.logger.Error(ctx, err)
 		c.AbortWithStatus(http.StatusInternalServerError)

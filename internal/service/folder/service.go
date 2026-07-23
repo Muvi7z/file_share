@@ -2,6 +2,7 @@ package folder
 
 import (
 	"context"
+	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
 	"fmt"
@@ -13,8 +14,11 @@ import (
 )
 
 type folderRepository interface {
-	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string) ([]entity.Folder, error)
+	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot, enabled *bool) ([]entity.Folder, error)
 	CreateFolder(ctx context.Context, folder entity.Folder) (entity.Folder, error)
+	GetFolderById(ctx context.Context, id string) (entity.Folder, error)
+	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
+	DeleteFolder(ctx context.Context, id string) error
 }
 
 type scanJobRepository interface {
@@ -35,8 +39,89 @@ func NewService(folderRepository folderRepository, logger deps.Logger, scanJobRe
 	}
 }
 
-func (s *Service) GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string) ([]entity.Folder, error) {
-	return s.folderRepository.GetFolders(ctx, query, rootFolderId, parentFolderId)
+func (s *Service) DeleteFolder(ctx context.Context, id string) error {
+	err := s.folderRepository.DeleteFolder(ctx, id)
+	if err != nil {
+		return entity.ErrorDeleteFolder
+	}
+
+	return nil
+}
+
+func (s *Service) UpdateFolder(ctx context.Context, update entity.UpdateFolderRequest, id string) (entity.Folder, error) {
+	getFolder, err := s.folderRepository.GetFolderById(ctx, id)
+	if err != nil {
+		return entity.Folder{}, entity.ErrorGetFolder
+	}
+
+	if !getFolder.IsRoot {
+		return entity.Folder{}, entity.ErrorUpdateFolder
+	}
+
+	folder, err := s.folderRepository.UpdateFolder(ctx, update, id)
+	if err != nil {
+		return entity.Folder{}, entity.ErrorUpdateFolder
+	}
+
+	return folder, nil
+}
+
+func (s *Service) GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool) ([]entity.Folder, error) {
+	folders, err := s.folderRepository.GetFolders(ctx, query, rootFolderId, parentFolderId, isRoot, nil)
+	if err != nil {
+		return nil, entity.ErrorGetFolders
+	}
+
+	return folders, nil
+}
+
+func (s *Service) GetFoldersEntries(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool) ([]entity.FileBrowserEntry, error) {
+	if parentFolderId != "" {
+		_, err := s.folderRepository.GetFolderById(ctx, parentFolderId)
+		if err != nil {
+			if errors.Is(err, entity.ErrorNotFoundFolder) {
+				return nil, entity.ErrorNotFoundFolder
+			}
+			return nil, entity.ErrorGetFolder
+		}
+	}
+
+	folders, err := s.folderRepository.GetFolders(ctx, query, rootFolderId, parentFolderId, isRoot, nil)
+	if err != nil {
+		return nil, entity.ErrorGetFolders
+	}
+
+	browserEntityList := make([]entity.FileBrowserEntry, 0)
+
+	for _, folder := range folders {
+		browserEntity := entity.FileBrowserEntry{
+			Type:   "folder",
+			Folder: &folder,
+		}
+
+		browserEntityList = append(browserEntityList, browserEntity)
+	}
+
+	return browserEntityList, nil
+}
+
+func (s *Service) GetFolder(ctx context.Context, folderId string) (entity.Folder, error) {
+	folder, err := s.folderRepository.GetFolderById(ctx, folderId)
+	if err != nil {
+		if errors.Is(err, entity.ErrorNotFoundFolder) {
+			return entity.Folder{}, entity.ErrorNotFoundFolder
+		}
+		return entity.Folder{}, entity.ErrorGetFolder
+	}
+
+	rootFolder, err := s.folderRepository.GetFolderById(ctx, folder.RootFolderId)
+	if err != nil {
+		return entity.Folder{}, fmt.Errorf("error getting root folder")
+	}
+
+	_ = rootFolder
+
+	return folder, nil
 }
 
 func (s *Service) CreateFolderRootFolder(ctx context.Context, path string) (entity.CreateRootFolderResponse, error) {

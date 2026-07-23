@@ -1,4 +1,4 @@
-package videos
+package video
 
 import (
 	"fmt"

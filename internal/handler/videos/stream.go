@@ -1,14 +1,34 @@
 package videos
 
 import (
+	"file_share/internal/entity"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
-	"path/filepath"
 )
 
-func (h *Handler) VideoStream(c *gin.Context) {
-	filename := c.Param("filename")
+func (h *Handler) Stream(c *gin.Context) {
+	ctx := c.Request.Context()
+	videoId := c.Param("videoId")
 
-	filePath := filepath.Join("./hls_files", filename)
+	stream, err := h.videoService.Stream(ctx, videoId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, entity.ErrorResponse{
+			Message: err.Error(),
+			Code:    "500",
+		})
+		return
+	}
 
-	_ = filePath
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("Content-Disposition", `inline; filename="`+stream.FileName+`"`)
+
+	http.ServeContent(
+		c.Writer,
+		c.Request,
+		stream.FileName,
+		stream.ModTime,
+		stream.Reader,
+	)
 }

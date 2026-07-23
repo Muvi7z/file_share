@@ -35,9 +35,9 @@ type Folder struct {
 }
 
 type FileBrowserEntry struct {
-	Type   string `json:"type"`
-	Folder Folder `json:"folder"`
-	Video  Video  `json:"video"`
+	Type   string  `json:"type"`
+	Folder *Folder `json:"folder"`
+	Video  *Video  `json:"video"`
 }
 
 type CreateRootFolderRequest struct {
@@ -47,4 +47,12 @@ type CreateRootFolderRequest struct {
 type CreateRootFolderResponse struct {
 	Folder  Folder  `json:"folder"`
 	ScanJob ScanJob `json:"scanJob"`
+}
+
+type UpdateFolderRequest struct {
+	Name             string `json:"name"`
+	Enabled          *bool  `json:"enabled"`
+	FilesCount       int    `json:"filesCount"`
+	VideosCount      int    `json:"videosCount"`
+	ChildFolderCount int    `json:"childFolderCount"`
 }

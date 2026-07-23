@@ -1,6 +1,7 @@
 package server
 
 import (
+	middleware "file_share/internal/handler/middlewares/auth"
 	videosHandler "file_share/internal/handler/videos"
 	"net/http"
 
@@ -8,8 +9,9 @@ import (
 )
 
 type Server struct {
-	router        *gin.Engine
-	videosHandler *videosHandler.Handler
+	router         *gin.Engine
+	videosHandler  *videosHandler.Handler
+	authMiddleware *middleware.Middleware
 }
 
 func NewServer(router *gin.Engine, videosHandler *videosHandler.Handler) *Server {
@@ -35,7 +37,7 @@ func LiberalCORS(c *gin.Context) {
 
 func (s *Server) Register() {
 	s.router.Use(LiberalCORS)
-
+	s.router.Use(s.authMiddleware.Apply)
 	api := s.router.Group("/api")
 	{
 		api.GET("/health")

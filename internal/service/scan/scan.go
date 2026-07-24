@@ -5,6 +5,7 @@ import (
 	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
+	"file_share/pkg/utils"
 	"fmt"
 	"io/fs"
 	"math"
@@ -22,7 +23,10 @@ type repository interface {
 	GetFolderById(ctx context.Context, id string) (entity.Folder, error)
 	CreateFolder(ctx context.Context, folder entity.Folder) (entity.Folder, error)
 	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
+	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error)
 	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
+	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot, enabled *bool) ([]entity.Folder, error)
+	DeleteFolder(ctx context.Context, id string) error
 }
 
 type scanJobRepository interface {
@@ -32,7 +36,7 @@ type scanJobRepository interface {
 }
 
 type posterGenerator interface {
-	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId string) (entity.PosterFile, error)
+	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
 }
 
 var allowedVideoExts = map[string]bool{
@@ -109,10 +113,90 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 				var folder entity.Folder
 
 				folder, err = s.repository.GetFolderById(ctx, scanJob.FolderId)
-
-				err = s.ScanFolder(ctx, folder)
 				if err != nil {
 					continue
+				}
+
+				folders, err := s.repository.GetFolders(ctx, "", scanJob.FolderId, "", nil, nil)
+				if err != nil {
+					continue
+				}
+
+				videos, err := s.repository.GetAllVideo(ctx, "", scanJob.FolderId, "", 0, 0)
+				if err != nil {
+					continue
+				}
+
+				browserFileEntries, err := s.ScanFolder(ctx, folder)
+				if err != nil {
+					continue
+				}
+
+				for _, folderItem := range folders {
+					folderEntry, ok := browserFileEntries[folder.Path]
+					if !ok {
+						err = s.repository.DeleteFolder(ctx, folderEntry.Folder.Id)
+						if err != nil {
+							s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+							continue
+						}
+						continue
+					}
+
+					if folderEntry.Folder.Id == folderItem.Id {
+						update := entity.UpdateFolderRequest{
+							FilesCount:       folderEntry.Folder.FilesCount,
+							VideosCount:      folderEntry.Folder.VideosCount,
+							ChildFolderCount: folderEntry.Folder.ChildFolderCount,
+						}
+						_, err = s.repository.UpdateFolder(ctx, update, folderEntry.Folder.Id)
+						if err != nil {
+							s.logger.Error(ctx, fmt.Errorf("failed update video: %v", err))
+							continue
+						}
+					} else {
+						_, err = s.repository.CreateFolder(ctx, *folderEntry.Folder)
+						if err != nil {
+							s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+						}
+					}
+
+				}
+
+				for _, videoItem := range videos {
+					videoEntry, ok := browserFileEntries[videoItem.Path]
+					if !ok {
+						//err = s.repository.DeleteFolder(ctx, videoEntry.Video.Id)
+						//if err != nil {
+						//	s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+						//	continue
+						//}
+						continue
+					}
+
+					video := videoEntry.Video
+
+					duration, _ := strconv.Atoi(video.Duration)
+
+					halfTime := utils.GetHalfTimeVideo(int64(duration))
+
+					file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, video.Path, video.Id, halfTime)
+					if err != nil {
+						s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
+						continue
+					}
+					err = file.Reader.Close()
+					if err != nil {
+						continue
+					}
+
+					if video.Id != videoItem.Id {
+						_, err = s.repository.CreateVideo(ctx, *video)
+						if err != nil {
+							s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+							continue
+						}
+					}
 				}
 
 				scanJob.Status = entity.StatusCompleted
@@ -121,8 +205,6 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 				if err != nil {
 					continue
 				}
-
-				//создание папок или файлов
 
 			}
 
@@ -133,8 +215,8 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 	}()
 }
 
-func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
-	folderMap := make(map[string]entity.Folder)
+func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[string]entity.FileBrowserEntry, error) {
+	browserFileMap := make(map[string]entity.FileBrowserEntry)
 
 	err := filepath.WalkDir(rootFolder.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -145,7 +227,10 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
 		// 2. Проверяем, является ли элемент директорией
 		if d.IsDir() {
 			if rootFolder.Path == path {
-				folderMap[path] = rootFolder
+				browserFileMap[path] = entity.FileBrowserEntry{
+					Type:   entity.FileTypeFolder,
+					Folder: &rootFolder,
+				}
 
 				return nil
 			}
@@ -167,30 +252,28 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
 
 			parentPath := filepath.Dir(path)
 
-			parentFolder, ok := folderMap[parentPath]
+			parentFolder, ok := browserFileMap[parentPath]
 			if ok {
-				parentFolder.FilesCount++
-				parentFolder.ChildFolderCount++
+				parentFolder.Folder.FilesCount++
+				parentFolder.Folder.ChildFolderCount++
 
-				folderMap[parentPath] = parentFolder
+				browserFileMap[parentPath] = parentFolder
 
-				folder.ParentId = parentFolder.Id
+				folder.ParentId = parentFolder.Folder.Id
 				folder.RootFolderId = rootFolder.Id
 			}
-			_, err = s.repository.CreateFolder(ctx, folder)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-				return err
-			}
 
-			folderMap[path] = folder
+			browserFileMap[path] = entity.FileBrowserEntry{
+				Type:   entity.FileTypeFolder,
+				Folder: &folder,
+			}
 
 		} else {
 			// Получаем размер файла (требует дополнительного sys call, поэтому вызываем только для файлов)
 			info, _ := d.Info()
 			data, err := ffprobe.GetProbeDataContext(ctx, path)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed walk dir: %v", err))
+				s.logger.Error(ctx, fmt.Errorf("failed walk dir: %s %v", path, err))
 				return nil
 			}
 
@@ -221,15 +304,15 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
 
 			parentPath := filepath.Dir(path)
 
-			folder, ok := folderMap[parentPath]
+			folderEntry, ok := browserFileMap[parentPath]
 			if ok {
-				folder.VideosCount++
+				folderEntry.Folder.VideosCount++
 
-				folderMap[parentPath] = folder
+				browserFileMap[parentPath] = folderEntry
 
-				video.ParentFolderId = folder.Id
-				video.FolderName = folder.Name
-				video.FolderId = folder.Id
+				video.ParentFolderId = folderEntry.Folder.Id
+				video.FolderName = folderEntry.Folder.Name
+				video.FolderId = folderEntry.Folder.Id
 			}
 
 			for _, stream := range data.Streams {
@@ -240,7 +323,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
 					video.Size = FormatFileSize(info.Size())
 					duration, err := strconv.Atoi(stream.Duration)
 					if err == nil {
-						video.Duration = FormatDuration(int64(duration))
+						video.Duration = utils.FormatDuration(int64(duration))
 					} else {
 						video.Duration = stream.Duration
 					}
@@ -249,54 +332,16 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) error {
 				}
 			}
 
-			file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, path, uuidVideo)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
-				return err
-			}
-			err = file.Reader.Close()
-			if err != nil {
-				return err
-			}
-			_, err = s.repository.CreateVideo(ctx, video)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-				return err
-			}
-
 		}
 
 		return nil // Продолжаем обход
 	})
 
-	folder, ok := folderMap[rootFolder.Path]
-	if ok {
-		update := entity.UpdateFolderRequest{
-			FilesCount:       folder.FilesCount,
-			VideosCount:      folder.VideosCount,
-			ChildFolderCount: folder.ChildFolderCount,
-		}
-		_, err = s.repository.UpdateFolder(ctx, update, folder.Id)
-		if err != nil {
-			return err
-		}
-
-	}
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
-}
-
-func FormatDuration(totalSeconds int64) string {
-	h := totalSeconds / 3600
-	m := (totalSeconds % 3600) / 60
-	s := totalSeconds % 60
-	// %d — часы без ведущего нуля (2, а не 02)
-	// %02d — минуты и секунды с ведущим нулём (05, а не 5)
-	return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	return browserFileMap, nil
 }
 
 func FormatFileSize(bytes int64) string {

@@ -18,7 +18,7 @@ func NewPosterGenerator(TempDir string) *PosterGenerator {
 	}
 }
 
-func (g *PosterGenerator) GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId string) (entity.PosterFile, error) {
+func (g *PosterGenerator) GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error) {
 	if err := os.MkdirAll(g.TempDir, 0755); err != nil {
 		return entity.PosterFile{}, err
 	}
@@ -30,7 +30,7 @@ func (g *PosterGenerator) GeneratePosterFFmpeg(ctx context.Context, videoPath, v
 		"ffmpeg",
 		"-hide_banner",
 		"-loglevel", "error",
-		"-ss", "00:00:03",
+		"-ss", duration,
 		"-i", videoPath,
 		"-frames:v", "1",
 		"-q:v", "2",

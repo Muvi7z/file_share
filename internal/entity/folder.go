@@ -9,6 +9,11 @@ const (
 	StatusFailed    string = "failed"
 )
 
+const (
+	FileTypeFolder = "folder"
+	FileTypeVideo  = "video"
+)
+
 type ScanJob struct {
 	Id               string    `json:"id"`
 	FolderId         string    `json:"folderId"`

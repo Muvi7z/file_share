@@ -5,23 +5,22 @@ import (
 	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/handler/folder"
+	middleware "file_share/internal/handler/middlewares/auth"
 	"file_share/internal/handler/scan"
 	videosHandler "file_share/internal/handler/videos"
 	"net/http"
-	middleware "file_share/internal/handler/middlewares/auth"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
-	videosHandler *videosHandler.Handler
-	folderHandler *folder.Handler
-	scanHandler   *scan.Handler
-	logger        deps.Logger
-	addr          string
-	server        *http.Server
+	videosHandler  *videosHandler.Handler
+	folderHandler  *folder.Handler
+	scanHandler    *scan.Handler
+	logger         deps.Logger
+	addr           string
+	server         *http.Server
 	authMiddleware *middleware.Middleware
-
 }
 
 func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string) *Server {
@@ -70,7 +69,7 @@ func LiberalCORS(c *gin.Context) {
 
 func (s *Server) Register(router *gin.Engine) *gin.Engine {
 	router.Use(LiberalCORS)
-	router.Use(s.authMiddleware.Apply)
+	//router.Use(s.authMiddleware.Apply)
 
 	api := router.Group("/api")
 	{

@@ -71,7 +71,7 @@ func (r *Repository) createUserTx(ctx context.Context, tx *sqlx.Tx, user entity.
 		Id:           row.Id,
 		Login:        row.Login,
 		PasswordHash: row.PasswordHash,
-		Role:         row.Role,
+		Role:         entity.Role(row.Role),
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}
@@ -123,7 +123,7 @@ func (r *Repository) getUserByLoginTx(ctx context.Context, login string, tx *sql
 		Id:           row.Id,
 		Login:        row.Login,
 		PasswordHash: row.PasswordHash,
-		Role:         row.Role,
+		Role:         entity.Role(row.Role),
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}, err

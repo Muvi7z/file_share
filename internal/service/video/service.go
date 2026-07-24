@@ -5,8 +5,10 @@ import (
 	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
+	"file_share/pkg/utils"
 	"fmt"
 	"path/filepath"
+	"strconv"
 )
 
 type videoRepository interface {
@@ -21,7 +23,7 @@ type fileStorage interface {
 }
 
 type posterGenerator interface {
-	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId string) (entity.PosterFile, error)
+	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
 }
 
 type Service struct {
@@ -49,7 +51,11 @@ func (s *Service) CreateVideo(ctx context.Context, videoReq entity.Video) (entit
 		return entity.Video{}, entity.ErrorCreateVideo
 	}
 
-	_, err = s.posterGenerator.GeneratePosterFFmpeg(ctx, video.Path, video.Id)
+	duration, _ := strconv.Atoi(video.Duration)
+
+	halfTime := utils.GetHalfTimeVideo(int64(duration))
+
+	_, err = s.posterGenerator.GeneratePosterFFmpeg(ctx, video.Path, video.Id, halfTime)
 	if err != nil {
 		s.logger.Error(ctx, fmt.Errorf("failed generate poster: %v", err))
 		return entity.Video{}, entity.ErrorCreateVideo

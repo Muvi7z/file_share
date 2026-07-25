@@ -24,6 +24,7 @@ type repository interface {
 	CreateFolder(ctx context.Context, folder entity.Folder) (entity.Folder, error)
 	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
 	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error)
+	DeleteVideo(ctx context.Context, id string) error
 	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
 	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot, enabled *bool) ([]entity.Folder, error)
 	DeleteFolder(ctx context.Context, id string) error
@@ -166,11 +167,11 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 				for _, videoItem := range videos {
 					videoEntry, ok := browserFileEntries[videoItem.Path]
 					if !ok {
-						//err = s.repository.DeleteFolder(ctx, videoEntry.Video.Id)
-						//if err != nil {
-						//	s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
-						//	continue
-						//}
+						err = s.repository.DeleteVideo(ctx, videoEntry.Video.Id)
+						if err != nil {
+							s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+							continue
+						}
 						continue
 					}
 
@@ -208,9 +209,6 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 
 			}
 
-			//обновить данные корневой папки
-
-			//удалить файлы или папки, которых больше нет
 		}
 	}()
 }

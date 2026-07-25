@@ -114,6 +114,48 @@ func (r *Repository) CreateVideo(ctx context.Context, video entity.Video) (entit
 	return res, nil
 }
 
+func (r *Repository) DeleteVideo(ctx context.Context, id string) error {
+	var txErr, err error
+
+	txErr = sqlxTransaction(ctx, r.conn, func(tx *sqlx.Tx) error {
+		err = r.deleteVideoByIdTx(ctx, id, tx)
+		if err != nil {
+			return err
+		}
+
+		return err
+	})
+
+	if txErr != nil {
+		return txErr
+	}
+
+	return nil
+}
+
+func (r *Repository) deleteVideoByIdTx(ctx context.Context, id string, tx *sqlx.Tx) error {
+	sql, args, err := r.qb.Delete(videosTable).Where(sq.Eq{"id": id}).ToSql()
+	if err != nil {
+		return fmt.Errorf("error to building query %v", err)
+	}
+
+	row, err := tx.ExecContext(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("error to executing query %v", err)
+	}
+
+	rowsAffected, err := row.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error to executing query %v", err)
+	}
+
+	if rowsAffected == 0 {
+
+	}
+
+	return nil
+}
+
 func (r *Repository) createVideoTx(ctx context.Context, video entity.Video, tx *sqlx.Tx) (entity.Video, error) {
 	insertMap := map[string]any{
 		"id":               video.Id,

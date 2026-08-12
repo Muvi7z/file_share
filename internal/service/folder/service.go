@@ -25,17 +25,23 @@ type scanJobRepository interface {
 	CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error)
 }
 
+type videoRepository interface {
+	DeleteVideoByFolder(ctx context.Context, idRootFolder, parentFolderId string) error
+}
+
 type Service struct {
 	logger            deps.Logger
 	folderRepository  folderRepository
 	scanJobRepository scanJobRepository
+	videoRepository   videoRepository
 }
 
-func NewService(folderRepository folderRepository, logger deps.Logger, scanJobRepository scanJobRepository) *Service {
+func NewService(folderRepository folderRepository, logger deps.Logger, scanJobRepository scanJobRepository, videoRepository videoRepository) *Service {
 	return &Service{
 		logger:            logger,
 		folderRepository:  folderRepository,
 		scanJobRepository: scanJobRepository,
+		videoRepository:   videoRepository,
 	}
 }
 

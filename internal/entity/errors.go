@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrorTokenNotFound = errors.New("token not found")
 	ErrorForbidden     = errors.New("access denied")
+	ErrorNoRowsFound   = errors.New("no rows found")
 	ErrorBadRequest    = errors.New("incorrect fields")
 
 	ErrorNotFoundFolder = errors.New("folder not found")

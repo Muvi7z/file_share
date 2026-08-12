@@ -291,16 +291,16 @@ func (r *Repository) updateFolderTx(ctx context.Context, folder entity.UpdateFol
 		updateMap["enabled"] = *folder.Enabled
 	}
 
-	if folder.FilesCount > 0 {
-		updateMap["files_count"] = folder.FilesCount
+	if folder.FilesCount != nil {
+		updateMap["files_count"] = *folder.FilesCount
 	}
 
-	if folder.VideosCount > 0 {
-		updateMap["video_count"] = folder.VideosCount
+	if folder.VideosCount != nil {
+		updateMap["video_count"] = *folder.VideosCount
 	}
 
-	if folder.ChildFolderCount > 0 {
-		updateMap["child_folder_count"] = folder.ChildFolderCount
+	if folder.ChildFolderCount != nil {
+		updateMap["child_folder_count"] = *folder.ChildFolderCount
 	}
 
 	sql, args, err := r.qb.Update(folderTable).
@@ -316,6 +316,9 @@ func (r *Repository) updateFolderTx(ctx context.Context, folder entity.UpdateFol
 
 	err = tx.GetContext(ctx, &row, sql, args...)
 	if err != nil {
+		if errors.As(err, &pgx.ErrNoRows) {
+			return entity.Folder{}, entity.ErrorNoRowsFound
+		}
 		return entity.Folder{}, fmt.Errorf("error to executing query: %w", err)
 	}
 	var parentId string
@@ -355,6 +358,10 @@ func (r *Repository) DeleteFolder(ctx context.Context, id string) error {
 			return err
 		}
 
+		err = r.deleteVideoByFolderTx(ctx, id, "", tx)
+		if err != nil {
+			return err
+		}
 		return err
 	})
 

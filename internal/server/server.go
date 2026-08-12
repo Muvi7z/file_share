@@ -86,6 +86,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 			videos.GET("/", s.videosHandler.GetAll)
 			videos.GET("/:videoId", s.videosHandler.GetVideo)
 			videos.GET("/:videoId/stream", s.videosHandler.Stream)
+			videos.HEAD("/:videoId/stream", s.videosHandler.Stream)
 			videos.GET("/:videoId/poster", s.videosHandler.GetPoster)
 
 		}

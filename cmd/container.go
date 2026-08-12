@@ -125,6 +125,7 @@ func (c *Container) GetFolderService() *folder.Service {
 			c.GetRepository(),
 			c.GetLogger(),
 			c.GetRepository(),
+			c.GetRepository(),
 		)
 	}
 

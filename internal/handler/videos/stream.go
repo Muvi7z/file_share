@@ -2,6 +2,7 @@ package videos
 
 import (
 	"file_share/internal/entity"
+	"file_share/pkg/utils/video"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -19,9 +20,13 @@ func (h *Handler) Stream(c *gin.Context) {
 		})
 		return
 	}
+	defer stream.Reader.Close()
 
-	c.Header("Content-Type", "application/octet-stream")
+	contentType := video.VideoContentType(stream.FileName)
+
+	c.Header("Content-Type", contentType)
 	c.Header("Accept-Ranges", "bytes")
+	c.Header("Cache-Control", "no-transform")
 	c.Header("Content-Disposition", `inline; filename="`+stream.FileName+`"`)
 
 	http.ServeContent(
@@ -31,4 +36,5 @@ func (h *Handler) Stream(c *gin.Context) {
 		stream.ModTime,
 		stream.Reader,
 	)
+
 }

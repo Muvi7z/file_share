@@ -57,7 +57,7 @@ type CreateRootFolderResponse struct {
 type UpdateFolderRequest struct {
 	Name             string `json:"name"`
 	Enabled          *bool  `json:"enabled"`
-	FilesCount       int    `json:"filesCount"`
-	VideosCount      int    `json:"videosCount"`
-	ChildFolderCount int    `json:"childFolderCount"`
+	FilesCount       *int   `json:"filesCount"`
+	VideosCount      *int   `json:"videosCount"`
+	ChildFolderCount *int   `json:"childFolderCount"`
 }

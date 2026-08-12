@@ -5,10 +5,9 @@ import (
 	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
-	"file_share/pkg/utils"
+	video2 "file_share/pkg/utils/video"
 	"fmt"
 	"io/fs"
-	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -118,86 +117,9 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 					continue
 				}
 
-				folders, err := s.repository.GetFolders(ctx, "", scanJob.FolderId, "", nil, nil)
+				_, err := s.ScanFolder(ctx, folder)
 				if err != nil {
 					continue
-				}
-
-				videos, err := s.repository.GetAllVideo(ctx, "", scanJob.FolderId, "", 0, 0)
-				if err != nil {
-					continue
-				}
-
-				browserFileEntries, err := s.ScanFolder(ctx, folder)
-				if err != nil {
-					continue
-				}
-
-				for _, folderItem := range folders {
-					folderEntry, ok := browserFileEntries[folder.Path]
-					if !ok {
-						err = s.repository.DeleteFolder(ctx, folderEntry.Folder.Id)
-						if err != nil {
-							s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
-							continue
-						}
-						continue
-					}
-
-					if folderEntry.Folder.Id == folderItem.Id {
-						update := entity.UpdateFolderRequest{
-							FilesCount:       folderEntry.Folder.FilesCount,
-							VideosCount:      folderEntry.Folder.VideosCount,
-							ChildFolderCount: folderEntry.Folder.ChildFolderCount,
-						}
-						_, err = s.repository.UpdateFolder(ctx, update, folderEntry.Folder.Id)
-						if err != nil {
-							s.logger.Error(ctx, fmt.Errorf("failed update video: %v", err))
-							continue
-						}
-					} else {
-						_, err = s.repository.CreateFolder(ctx, *folderEntry.Folder)
-						if err != nil {
-							s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-						}
-					}
-
-				}
-
-				for _, videoItem := range videos {
-					videoEntry, ok := browserFileEntries[videoItem.Path]
-					if !ok {
-						err = s.repository.DeleteVideo(ctx, videoEntry.Video.Id)
-						if err != nil {
-							s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
-							continue
-						}
-						continue
-					}
-
-					video := videoEntry.Video
-
-					duration, _ := strconv.Atoi(video.Duration)
-
-					halfTime := utils.GetHalfTimeVideo(int64(duration))
-
-					file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, video.Path, video.Id, halfTime)
-					if err != nil {
-						s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
-						continue
-					}
-					err = file.Reader.Close()
-					if err != nil {
-						continue
-					}
-
-					if video.Id != videoItem.Id {
-						_, err = s.repository.CreateVideo(ctx, *video)
-						if err != nil {
-							s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-							continue
-						}
-					}
 				}
 
 				scanJob.Status = entity.StatusCompleted
@@ -215,8 +137,34 @@ func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration)
 
 func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[string]entity.FileBrowserEntry, error) {
 	browserFileMap := make(map[string]entity.FileBrowserEntry)
+	var localFolders []entity.Folder
+	var localVideos []entity.Video
+	foldersEntries := make(map[string]entity.FileBrowserEntry)
+	videosEntries := make(map[string]entity.FileBrowserEntry)
+	const numWorkers = 8
 
-	err := filepath.WalkDir(rootFolder.Path, func(path string, d fs.DirEntry, err error) error {
+	jobs := make(chan string, 200)
+
+	// Запускаем фиксированный пул воркеров.
+	for w := 1; w <= numWorkers; w++ {
+		go s.WorkerFixFastStart(ctx, jobs)
+	}
+
+	folders, err := s.repository.GetFolders(ctx, "", rootFolder.Id, "", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, folderItem := range folders {
+
+		foldersEntries[folderItem.Path] = entity.FileBrowserEntry{
+			Type:   entity.FileTypeFolder,
+			Folder: &folderItem,
+			Video:  nil,
+		}
+	}
+
+	err = filepath.WalkDir(rootFolder.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			s.logger.Error(ctx, fmt.Errorf("failed walk dir: %v", err))
 			return nil // Возвращаем nil, чтобы продолжить сканирование остальных файлов
@@ -229,11 +177,15 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 					Type:   entity.FileTypeFolder,
 					Folder: &rootFolder,
 				}
-
+				localFolders = append(localFolders, rootFolder)
 				return nil
 			}
 			uuidFolder := uuid.New().String()
 
+			folderEntries, ok := foldersEntries[path]
+			if ok {
+				uuidFolder = folderEntries.Folder.Id
+			}
 			folder := entity.Folder{
 				Id:               uuidFolder,
 				Name:             d.Name(),
@@ -261,6 +213,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				folder.RootFolderId = rootFolder.Id
 			}
 
+			localFolders = append(localFolders, folder)
 			browserFileMap[path] = entity.FileBrowserEntry{
 				Type:   entity.FileTypeFolder,
 				Folder: &folder,
@@ -284,6 +237,13 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				return nil
 			}
 
+			//go func() {
+			//	err := video2.FixFastStart(ctx, path)
+			//	if err != nil {
+			//		s.logger.Error(ctx, fmt.Errorf("%v: failed fix fast start: %v", path, err))
+			//	}
+			//}()
+			jobs <- path
 			// 3. Обрезаем расширение
 			nameWithoutExt := strings.TrimSuffix(fileName, ext)
 
@@ -310,7 +270,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 				video.ParentFolderId = folderEntry.Folder.Id
 				video.FolderName = folderEntry.Folder.Name
-				video.FolderId = folderEntry.Folder.Id
+				video.FolderId = rootFolder.Id
 			}
 
 			for _, stream := range data.Streams {
@@ -318,10 +278,10 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				case "video":
 					video.Codec = stream.CodecName
 					video.Resolution = fmt.Sprintf("%dx%d", stream.Width, stream.Height)
-					video.Size = FormatFileSize(info.Size())
+					video.Size = video2.FormatFileSize(info.Size())
 					duration, err := strconv.Atoi(stream.Duration)
 					if err == nil {
-						video.Duration = utils.FormatDuration(int64(duration))
+						video.Duration = video2.FormatDuration(int64(duration))
 					} else {
 						video.Duration = stream.Duration
 					}
@@ -330,54 +290,128 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				}
 			}
 
+			localVideos = append(localVideos, video)
+			browserFileMap[path] = entity.FileBrowserEntry{
+				Type:  entity.FileTypeVideo,
+				Video: &video,
+			}
+
 		}
 
 		return nil // Продолжаем обход
 	})
-
+	close(jobs)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, folderItem := range folders {
+		_, ok := browserFileMap[folderItem.Path]
+		if !ok {
+			err = s.repository.DeleteFolder(ctx, folderItem.Id)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+				return nil, err
+
+			}
+			continue
+		}
+	}
+
+	for _, localFolder := range localFolders {
+		folderEntry, ok := foldersEntries[localFolder.Path]
+		if !ok {
+			_, err = s.repository.CreateFolder(ctx, localFolder)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+				return nil, err
+
+			}
+			continue
+		}
+
+		browserFile, ok := browserFileMap[localFolder.Path]
+		update := entity.UpdateFolderRequest{
+			FilesCount:       &browserFile.Folder.FilesCount,
+			VideosCount:      &browserFile.Folder.VideosCount,
+			ChildFolderCount: &browserFile.Folder.ChildFolderCount,
+		}
+		_, err = s.repository.UpdateFolder(ctx, update, folderEntry.Folder.Id)
+		if err != nil {
+			if errors.Is(err, entity.ErrorNoRowsFound) {
+				return nil, nil
+			}
+			s.logger.Error(ctx, fmt.Errorf("failed update video: %v", err))
+			return nil, err
+
+		}
+
+	}
+
+	videos, err := s.repository.GetAllVideo(ctx, "", rootFolder.Id, "", 0, 0)
+	if err != nil {
+		return nil, err
+
+	}
+
+	for _, item := range videos {
+		_, ok := browserFileMap[item.Path]
+		if !ok {
+
+			err = s.repository.DeleteVideo(ctx, item.Id)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+				return nil, err
+
+			}
+			continue
+		}
+
+		videosEntries[item.Path] = entity.FileBrowserEntry{
+			Type:   entity.FileTypeVideo,
+			Folder: nil,
+			Video:  &item,
+		}
+	}
+
+	for _, localVideo := range localVideos {
+		_, ok := videosEntries[localVideo.Path]
+		if !ok {
+
+			duration, _ := strconv.ParseFloat(localVideo.Duration, 64)
+
+			halfTime := video2.GetHalfTimeVideo(int64(duration))
+
+			file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, localVideo.Path, localVideo.Id, halfTime)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
+				continue
+			}
+			err = file.Reader.Close()
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = s.repository.CreateVideo(ctx, localVideo)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+				return nil, err
+			}
+			continue
+		}
 	}
 
 	return browserFileMap, nil
 }
 
-func FormatFileSize(bytes int64) string {
-	if bytes < 0 {
-		return "-" + FormatFileSize(-bytes)
+func (s *Scan) WorkerFixFastStart(ctx context.Context, jobs <-chan string) {
+	for job := range jobs {
+		s.logger.Info(ctx, fmt.Sprintf("%v: started fix", job))
+		err := video2.FixFastStart(ctx, job)
+		if err != nil {
+			s.logger.Error(ctx, fmt.Errorf("%v: failed fix fast start: %v", job, err))
+		}
+		s.logger.Info(ctx, fmt.Sprintf("%v: end fix", job))
 	}
 
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d Б", bytes)
-	}
-
-	// Единицы измерения в порядке возрастания
-	units := []string{"КБ", "МБ", "ГБ", "ТБ", "ПБ", "ЭБ"}
-
-	// Находим подходящую единицу
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit && exp < len(units)-1; n /= unit {
-		div *= unit
-		exp++
-	}
-
-	// Считаем значение с плавающей точкой
-	value := float64(bytes) / float64(div)
-
-	// Округляем до 2 знаков после запятой
-	value = math.Round(value*100) / 100
-
-	// Убираем лишние нули: 1.50 МБ -> 1.5 МБ, 2.00 МБ -> 2 МБ
-	formatted := fmt.Sprintf("%.2f", value)
-	// Отрезаем нули в конце
-	for formatted[len(formatted)-1] == '0' {
-		formatted = formatted[:len(formatted)-1]
-	}
-	// Если осталась точка в конце — убираем и её
-	if formatted[len(formatted)-1] == '.' {
-		formatted = formatted[:len(formatted)-1]
-	}
-
-	return fmt.Sprintf("%s %s", formatted, units[exp])
 }

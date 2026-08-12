@@ -5,7 +5,7 @@ import (
 	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
-	"file_share/pkg/utils"
+	video2 "file_share/pkg/utils/video"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -53,7 +53,7 @@ func (s *Service) CreateVideo(ctx context.Context, videoReq entity.Video) (entit
 
 	duration, _ := strconv.Atoi(video.Duration)
 
-	halfTime := utils.GetHalfTimeVideo(int64(duration))
+	halfTime := video2.GetHalfTimeVideo(int64(duration))
 
 	_, err = s.posterGenerator.GeneratePosterFFmpeg(ctx, video.Path, video.Id, halfTime)
 	if err != nil {

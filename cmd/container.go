@@ -8,8 +8,10 @@ import (
 	"file_share/internal/handler/videos"
 	"file_share/internal/repository"
 	"file_share/internal/server"
+	"file_share/internal/service/auth"
 	"file_share/internal/service/folder"
 	"file_share/internal/service/scan"
+	"file_share/internal/service/token"
 	"file_share/internal/service/video"
 	"file_share/internal/storage"
 	"file_share/migrations"
@@ -28,6 +30,8 @@ type Container struct {
 	folderService *folder.Service
 	videoService  *video.Service
 	scanService   *scan.Scan
+	tokenService  *token.Service
+	authService   *auth.Service
 
 	folderHandler *folder2.Handler
 	videoHandler  *videos.Handler
@@ -103,12 +107,30 @@ func (c *Container) GetMigrator() *migrations.Migrator {
 	return c.migrator
 }
 
+func (c *Container) GetTokenService() *token.Service {
+	if c.tokenService == nil {
+		c.tokenService = token.New([]byte(c.configuration.GetJWTSecret()))
+	}
+	return c.tokenService
+}
+
 func (c *Container) GetRepository() *repository.Repository {
 	if c.repository == nil {
 		c.repository = repository.NewRepository(c.db)
 	}
 
 	return c.repository
+}
+
+func (c *Container) GetAuthService() *auth.Service {
+	if c.authService == nil {
+		c.authService = auth.NewService(
+			c.GetRepository(),
+			c.GetTokenService(),
+		)
+	}
+
+	return c.authService
 }
 
 func (c *Container) GetFileStorage() *storage.Storage {

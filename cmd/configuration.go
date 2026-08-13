@@ -17,6 +17,8 @@ const (
 	envServerHost = "SERVER_HOST"
 	envServerPort = "SERVER_PORT"
 	envPosterDir  = "POSTER_DIR"
+
+	envJWTSecret = "JWT_SECRET"
 )
 
 func newFromEnv() (*configuration, error) {
@@ -76,6 +78,8 @@ func newFromEnv() (*configuration, error) {
 
 	c.serverConfiguration = sc
 
+	c.jwtSecret = getStringFromEnvOrDefault(envJWTSecret, "default-secret-key-change-me")
+
 	return c, nil
 }
 
@@ -83,6 +87,7 @@ type configuration struct {
 	postgresConfiguration *postgresConfiguration
 	serverConfiguration   *serverConfiguration
 	posterDir             string
+	jwtSecret             string
 }
 
 type postgresConfiguration struct {
@@ -126,4 +131,8 @@ func (c *configuration) GetServerConfiguration() *serverConfiguration {
 
 func (sc *serverConfiguration) GetAddress() string {
 	return fmt.Sprintf("%s:%d", sc.host, sc.port)
+}
+
+func (c *configuration) GetJWTSecret() string {
+	return c.jwtSecret
 }

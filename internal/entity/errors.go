@@ -25,6 +25,10 @@ var (
 	ErrorCreateVideo    = errors.New("error create video")
 	ErrorGetVideo       = errors.New("error get video")
 	ErrorGetVideoStream = errors.New("error get video stream")
+
+	ErrorGetUser            = errors.New("error get user")
+	ErrorLoginUser          = errors.New("error login user")
+	ErrorInvalidCredentials = errors.New("invalid credentials")
 )
 
 type ErrorResponse struct {

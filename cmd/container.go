@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"context"
+	"file_share/internal/cache"
+	redis2 "file_share/internal/cache/redis"
 	"file_share/internal/generator"
 	folder2 "file_share/internal/handler/folder"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
 	"file_share/internal/repository"
+	"file_share/internal/repository/session"
 	"file_share/internal/server"
 	"file_share/internal/service/auth"
 	"file_share/internal/service/folder"
@@ -18,6 +21,7 @@ import (
 	"file_share/pkg/logger"
 	"fmt"
 
+	"github.com/gomodule/redigo/redis"
 	"github.com/jmoiron/sqlx"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
@@ -25,7 +29,8 @@ import (
 type Container struct {
 	configuration *configuration
 
-	repository *repository.Repository
+	repository        *repository.Repository
+	sessionRepository *session.Repository
 
 	folderService *folder.Service
 	videoService  *video.Service
@@ -44,6 +49,9 @@ type Container struct {
 	server *server.Server
 
 	tempDir string
+
+	redisPool   *redis.Pool
+	redisClient cache.RedisClient
 
 	ctx               context.Context
 	db                *sqlx.DB
@@ -127,6 +135,7 @@ func (c *Container) GetAuthService() *auth.Service {
 		c.authService = auth.NewService(
 			c.GetRepository(),
 			c.GetTokenService(),
+			c.GetSessionRepository(),
 		)
 	}
 
@@ -237,4 +246,37 @@ func (c *Container) GetServer() *server.Server {
 	}
 
 	return c.server
+}
+
+func (c *Container) GetSessionRepository() *session.Repository {
+	if c.sessionRepository == nil {
+		c.sessionRepository = session.NewRepository(
+			c.GetRedisClient(),
+		)
+	}
+	return c.sessionRepository
+}
+
+func (c *Container) GetRedisClient() cache.RedisClient {
+	if c.redisClient == nil {
+		c.redisClient = redis2.NewClient(
+			c.GetRedisPool(),
+			c.GetLogger(),
+			c.configuration.redisConfiguration.GetConnectionTimeout(),
+		)
+	}
+
+	return c.redisClient
+}
+
+func (c *Container) GetRedisPool() *redis.Pool {
+	if c.redisPool == nil {
+		c.redisPool = &redis.Pool{
+			DialContext: func(ctx context.Context) (redis.Conn, error) {
+				return redis.DialContext(ctx, "tcp", c.configuration.redisConfiguration.GetAddress())
+			},
+		}
+	}
+
+	return c.redisPool
 }

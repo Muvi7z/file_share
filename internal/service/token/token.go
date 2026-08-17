@@ -3,8 +3,9 @@ package token
 import (
 	"errors"
 	"file_share/internal/entity"
-	"github.com/golang-jwt/jwt/v4"
 	"time"
+
+	"github.com/golang-jwt/jwt/v4"
 )
 
 var (

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 func getStringFromEnv(envName string) (string, error) {
@@ -38,4 +39,22 @@ func getIntValueFromEnv(envName string, defaultValue int64) (int64, error) {
 	}
 
 	return defaultValue, nil
+}
+
+func getTimeFromEnvOrDefault(envName string, defaultValue time.Time) (time.Time, error) {
+	env, err := getStringFromEnv(envName)
+	if err != nil {
+		return defaultValue, nil
+	}
+
+	return time.Parse(time.RFC3339, env)
+}
+
+func getDurationFromEnvOrDefault(envName string, defaultValue time.Duration) (time.Duration, error) {
+	env, err := getStringFromEnv(envName)
+	if err != nil {
+		return defaultValue, nil
+	}
+
+	return time.ParseDuration(env)
 }

@@ -29,6 +29,8 @@ var (
 	ErrorGetUser            = errors.New("error get user")
 	ErrorLoginUser          = errors.New("error login user")
 	ErrorInvalidCredentials = errors.New("invalid credentials")
+
+	ErrSessionNotFound = errors.New("session not found")
 )
 
 type ErrorResponse struct {

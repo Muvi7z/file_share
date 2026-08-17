@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"net"
+	"time"
 )
 
 const (
@@ -13,6 +15,10 @@ const (
 	envPostgresSslMode            = "POSTGRES_SSL_MODE"
 	envPostgresMaxIdleConnections = "POSTGRES_MAX_IDLE_CONNECTIONS"
 	envPostgresMaxOpenConnections = "POSTGRES_MAX_OPEN_CONNECTIONS"
+
+	envExternalRedisPort      = "EXTERNAL_REDIS_PORT"
+	envExternalRedisHost      = "EXTERNAL_REDIS_HOST"
+	envRedisConnectionTimeout = "REDIS_CONNECTION_TIMEOUT"
 
 	envServerHost = "SERVER_HOST"
 	envServerPort = "SERVER_PORT"
@@ -26,6 +32,8 @@ func newFromEnv() (*configuration, error) {
 
 	pc := &postgresConfiguration{}
 
+	rc := &redisConfiguration{}
+
 	var err error
 	pc.user, err = getStringFromEnv(envPostgresUser)
 	if err != nil {
@@ -38,6 +46,13 @@ func newFromEnv() (*configuration, error) {
 	}
 
 	pc.port = getStringFromEnvOrDefault(envPostgresPort, "5432")
+
+	rc.port = getStringFromEnvOrDefault(envExternalRedisPort, "6379")
+	rc.host = getStringFromEnvOrDefault(envExternalRedisHost, "localhost")
+	rc.connectionTimeout, err = getDurationFromEnvOrDefault(envRedisConnectionTimeout, time.Second*10)
+	if err != nil {
+		return nil, fmt.Errorf("error getting redis connection timeout: %s", err)
+	}
 
 	pc.password, err = getStringFromEnv(envPostgresPassword)
 	if err != nil {
@@ -78,6 +93,8 @@ func newFromEnv() (*configuration, error) {
 
 	c.serverConfiguration = sc
 
+	c.redisConfiguration = rc
+
 	c.jwtSecret = getStringFromEnvOrDefault(envJWTSecret, "default-secret-key-change-me")
 
 	return c, nil
@@ -86,8 +103,15 @@ func newFromEnv() (*configuration, error) {
 type configuration struct {
 	postgresConfiguration *postgresConfiguration
 	serverConfiguration   *serverConfiguration
+	redisConfiguration    *redisConfiguration
 	posterDir             string
 	jwtSecret             string
+}
+
+type redisConfiguration struct {
+	host              string
+	port              string
+	connectionTimeout time.Duration
 }
 
 type postgresConfiguration struct {
@@ -115,6 +139,14 @@ func (c *configuration) GetPosterDir() string {
 
 func (pc *postgresConfiguration) GetConnectionString() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", pc.user, pc.password, pc.host, pc.port, pc.db, pc.sslmode)
+}
+
+func (rc *redisConfiguration) GetAddress() string {
+	return net.JoinHostPort(rc.host, rc.port)
+}
+
+func (rc *redisConfiguration) GetConnectionTimeout() time.Duration {
+	return rc.connectionTimeout
 }
 
 func (pc *postgresConfiguration) GetMaxIdleConns() int {

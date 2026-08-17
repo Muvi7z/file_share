@@ -5,6 +5,7 @@ import (
 	"file_share/internal/cache"
 	redis2 "file_share/internal/cache/redis"
 	"file_share/internal/generator"
+	auth2 "file_share/internal/handler/auth"
 	folder2 "file_share/internal/handler/folder"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
@@ -41,6 +42,7 @@ type Container struct {
 	folderHandler *folder2.Handler
 	videoHandler  *videos.Handler
 	scanHandler   *scan2.Handler
+	authHandler   *auth2.Handler
 
 	fileStorage *storage.Storage
 
@@ -136,6 +138,8 @@ func (c *Container) GetAuthService() *auth.Service {
 			c.GetRepository(),
 			c.GetTokenService(),
 			c.GetSessionRepository(),
+			c.configuration.redisConfiguration.GetCacheTTL(),
+			c.GetLogger(),
 		)
 	}
 
@@ -233,6 +237,17 @@ func (c *Container) GetFolderHandler() *folder2.Handler {
 	return c.folderHandler
 }
 
+func (c *Container) GetAuthHandler() *auth2.Handler {
+	if c.authHandler == nil {
+		c.authHandler = auth2.NewHandler(
+			c.GetAuthService(),
+			c.GetLogger(),
+		)
+	}
+
+	return c.authHandler
+}
+
 func (c *Container) GetServer() *server.Server {
 	if c.server == nil {
 
@@ -242,6 +257,7 @@ func (c *Container) GetServer() *server.Server {
 			c.GetScanHandler(),
 			c.GetLogger(),
 			c.GetServerAddress(),
+			c.GetAuthHandler(),
 		)
 	}
 

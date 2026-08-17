@@ -2,8 +2,9 @@ package middleware
 
 import (
 	"file_share/internal/deps"
+	"file_share/internal/entity"
+	"file_share/internal/service/auth"
 	"file_share/internal/service/roles"
-	"fmt"
 	"github.com/gin-gonic/gin"
 )
 
@@ -11,9 +12,10 @@ type Middleware struct {
 	rolesProvider roles.RolesProvider
 	logger        deps.Logger
 	excludedPaths map[string][]string
+	authService   *auth.Service
 }
 
-func NewMiddleware(rolesProvider roles.RolesProvider, logger deps.Logger) *Middleware {
+func NewMiddleware(logger deps.Logger) *Middleware {
 	excludedPaths := map[string][]string{
 		"GET:/api/videos/":                {"admin"},
 		"GET:/api/videos/:videoId/stream": {"admin"},
@@ -27,15 +29,29 @@ func NewMiddleware(rolesProvider roles.RolesProvider, logger deps.Logger) *Middl
 	}
 
 	return &Middleware{
-		rolesProvider: rolesProvider,
 		logger:        logger,
 		excludedPaths: excludedPaths,
 	}
 }
 
-func (m *Middleware) Apply(c *gin.Context) {
-	path := fmt.Sprintf("%s:%s", c.Request.Method, c.FullPath())
-	if m.excludedPaths[path] != nil {
+func (m *Middleware) Apply(allowed ...entity.Role) gin.HandlerFunc {
+	roles := make(map[entity.Role]bool)
+
+	for _, role := range allowed {
+		roles[role] = true
+	}
+
+	return func(c *gin.Context) {
+		//header := c.GetHeader("Authorization")
+		//ctx := c.Request.Context()
+		//parts := strings.Split(header, " ")
+		//
+		//if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		//	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error not found bearer"})
+		//	return
+		//}
+		//
+		//token := parts[1]
 
 	}
 }

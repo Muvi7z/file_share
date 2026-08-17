@@ -28,6 +28,7 @@ var (
 
 	ErrorGetUser            = errors.New("error get user")
 	ErrorLoginUser          = errors.New("error login user")
+	ErrorAuthMe             = errors.New("error auth me")
 	ErrorInvalidCredentials = errors.New("invalid credentials")
 
 	ErrSessionNotFound = errors.New("session not found")

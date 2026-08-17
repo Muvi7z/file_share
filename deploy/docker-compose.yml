@@ -17,7 +17,7 @@ services:
       - general
   redis: # Redis — кэш и хранилище сессий для IAM
     image: redis:7.2.5-alpine3.20 # Лёгкий образ Redis последней стабильной версии
-    container_name: redis # Явное имя контейнера Redis
+    container_name: redis-fs # Явное имя контейнера Redis
 
     env_file:
       - ./.env

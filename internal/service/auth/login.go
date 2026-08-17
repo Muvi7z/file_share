@@ -3,29 +3,45 @@ package auth
 import (
 	"context"
 	"file_share/internal/entity"
+	"github.com/google/uuid"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *Service) Login(ctx context.Context, user entity.LoginUser) error {
-	//Поиск по логину
-	//проверка пароля
-	//Создать токен
-	//создать и вернуть сессия
+func (s *Service) Login(ctx context.Context, user entity.LoginUser) (entity.Session, error) {
+
 	findUser, err := s.userRepository.GetUserByLogin(ctx, user.Login)
 	if err != nil {
-		return entity.ErrorGetUser
+		s.logger.Error(ctx, err)
+		return entity.Session{}, entity.ErrorGetUser
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(findUser.PasswordHash), []byte(user.Password))
 	if err != nil {
-		return entity.ErrorInvalidCredentials
+		s.logger.Error(ctx, err)
+		return entity.Session{}, entity.ErrorInvalidCredentials
 	}
 
-	_, err = s.tokenService.GenerateToken(findUser.Id, findUser.Role)
+	//_, err = s.tokenService.GenerateToken(findUser.Id, findUser.Role)
+	//if err != nil {
+	//	return entity.ErrorLoginUser
+	//}
+
+	token := uuid.New().String()
+
+	session := entity.Session{
+		Token:     token,
+		Login:     user.Login,
+		Role:      findUser.Role,
+		ExpiresAt: time.Now().Add(s.cacheTTL),
+	}
+
+	err = s.sessionRepository.SetSession(ctx, token, session)
 	if err != nil {
-		return entity.ErrorLoginUser
+		s.logger.Error(ctx, err)
+		return entity.Session{}, entity.ErrorLoginUser
 	}
 
-	return nil
+	return session, nil
 }

@@ -19,6 +19,7 @@ const (
 	envExternalRedisPort      = "EXTERNAL_REDIS_PORT"
 	envExternalRedisHost      = "EXTERNAL_REDIS_HOST"
 	envRedisConnectionTimeout = "REDIS_CONNECTION_TIMEOUT"
+	envRedisCacheTTL          = "REDIS_CACHE_TTL"
 
 	envServerHost = "SERVER_HOST"
 	envServerPort = "SERVER_PORT"
@@ -50,6 +51,10 @@ func newFromEnv() (*configuration, error) {
 	rc.port = getStringFromEnvOrDefault(envExternalRedisPort, "6379")
 	rc.host = getStringFromEnvOrDefault(envExternalRedisHost, "localhost")
 	rc.connectionTimeout, err = getDurationFromEnvOrDefault(envRedisConnectionTimeout, time.Second*10)
+	if err != nil {
+		return nil, fmt.Errorf("error getting redis connection timeout: %s", err)
+	}
+	rc.cacheTTL, err = getDurationFromEnvOrDefault(envRedisCacheTTL, time.Hour*24)
 	if err != nil {
 		return nil, fmt.Errorf("error getting redis connection timeout: %s", err)
 	}
@@ -112,6 +117,7 @@ type redisConfiguration struct {
 	host              string
 	port              string
 	connectionTimeout time.Duration
+	cacheTTL          time.Duration
 }
 
 type postgresConfiguration struct {
@@ -147,6 +153,10 @@ func (rc *redisConfiguration) GetAddress() string {
 
 func (rc *redisConfiguration) GetConnectionTimeout() time.Duration {
 	return rc.connectionTimeout
+}
+
+func (rc *redisConfiguration) GetCacheTTL() time.Duration {
+	return rc.cacheTTL
 }
 
 func (pc *postgresConfiguration) GetMaxIdleConns() int {

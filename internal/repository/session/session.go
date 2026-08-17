@@ -18,7 +18,7 @@ type sessionRow struct {
 	ExpiresAt time.Time `db:"expires_at"`
 }
 
-func (r *Repository) CreateSession(ctx context.Context, key string, session entity.Session) error {
+func (r *Repository) SetSession(ctx context.Context, key string, session entity.Session) error {
 	cacheKey := r.getCacheKey(key)
 
 	redisView := converter.SessionToRedisView(session)

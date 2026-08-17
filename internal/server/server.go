@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"file_share/internal/deps"
+	"file_share/internal/handler/auth"
 	"file_share/internal/handler/folder"
 	middleware "file_share/internal/handler/middlewares/auth"
 	"file_share/internal/handler/scan"
@@ -16,6 +17,7 @@ import (
 type Server struct {
 	videosHandler  *videosHandler.Handler
 	folderHandler  *folder.Handler
+	authHandler    *auth.Handler
 	scanHandler    *scan.Handler
 	logger         deps.Logger
 	addr           string
@@ -23,13 +25,14 @@ type Server struct {
 	authMiddleware *middleware.Middleware
 }
 
-func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string) *Server {
+func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string, authHandler *auth.Handler) *Server {
 	s := &Server{
 		videosHandler: videosHandler,
 		folderHandler: folderHandler,
 		scanHandler:   scanHandler,
 		logger:        logger,
 		addr:          addr,
+		authHandler:   authHandler,
 	}
 
 	router := s.Register(gin.Default())
@@ -75,10 +78,10 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 	{
 		api.GET("/health")
 
-		auth := api.Group("/auth")
+		authGroup := api.Group("/auth")
 		{
-			auth.POST("/login")
-			auth.POST("/me")
+			authGroup.POST("/login", s.authHandler.Login)
+			authGroup.POST("/me", s.authHandler.Me)
 		}
 
 		videos := api.Group("/videos")

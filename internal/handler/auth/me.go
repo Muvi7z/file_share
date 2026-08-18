@@ -7,8 +7,8 @@ import (
 )
 
 func (h *Handler) Me(c *gin.Context) {
-	header := c.GetHeader("Authorization")
 	ctx := c.Request.Context()
+	header := c.GetHeader("Authorization")
 	parts := strings.Split(header, " ")
 
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {

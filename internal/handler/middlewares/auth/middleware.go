@@ -6,6 +6,8 @@ import (
 	"file_share/internal/service/auth"
 	"file_share/internal/service/roles"
 	"github.com/gin-gonic/gin"
+	"net/http"
+	"strings"
 )
 
 type Middleware struct {
@@ -35,23 +37,47 @@ func NewMiddleware(logger deps.Logger) *Middleware {
 }
 
 func (m *Middleware) Apply(allowed ...entity.Role) gin.HandlerFunc {
-	roles := make(map[entity.Role]bool)
+	roleList := make(map[entity.Role]bool)
 
 	for _, role := range allowed {
-		roles[role] = true
+		roleList[role] = true
 	}
 
 	return func(c *gin.Context) {
-		//header := c.GetHeader("Authorization")
-		//ctx := c.Request.Context()
-		//parts := strings.Split(header, " ")
-		//
-		//if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		//	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error not found bearer"})
-		//	return
-		//}
-		//
-		//token := parts[1]
+		ctx := c.Request.Context()
 
+		header := c.GetHeader("Authorization")
+
+		if len(header) == 0 {
+			_, ok := roleList[entity.RoleViewer]
+			if !ok {
+				c.AbortWithStatusJSON(403, gin.H{
+					"error": "forbidden",
+				})
+				return
+			}
+		}
+
+		parts := strings.Split(header, " ")
+
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error not found bearer"})
+			return
+		}
+
+		token := parts[1]
+
+		user, err := m.authService.Me(ctx, token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, entity.ErrorResponse{
+				Message: "Forbidden",
+				Code:    "403",
+			})
+			return
+		}
+
+		_ = user
+
+		c.Next()
 	}
 }

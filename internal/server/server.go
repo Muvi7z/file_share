@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"file_share/internal/deps"
+	"file_share/internal/entity"
 	"file_share/internal/handler/auth"
 	"file_share/internal/handler/folder"
 	middleware "file_share/internal/handler/middlewares/auth"
@@ -25,14 +26,15 @@ type Server struct {
 	authMiddleware *middleware.Middleware
 }
 
-func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string, authHandler *auth.Handler) *Server {
+func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string, authHandler *auth.Handler, authMiddleware *middleware.Middleware) *Server {
 	s := &Server{
-		videosHandler: videosHandler,
-		folderHandler: folderHandler,
-		scanHandler:   scanHandler,
-		logger:        logger,
-		addr:          addr,
-		authHandler:   authHandler,
+		videosHandler:  videosHandler,
+		folderHandler:  folderHandler,
+		scanHandler:    scanHandler,
+		logger:         logger,
+		addr:           addr,
+		authHandler:    authHandler,
+		authMiddleware: authMiddleware,
 	}
 
 	router := s.Register(gin.Default())
@@ -81,7 +83,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 		authGroup := api.Group("/auth")
 		{
 			authGroup.POST("/login", s.authHandler.Login)
-			authGroup.POST("/me", s.authHandler.Me)
+			authGroup.POST("/me", s.authMiddleware.Apply(entity.RoleUser, entity.RoleAdmin), s.authHandler.Me)
 		}
 
 		videos := api.Group("/videos")
@@ -102,13 +104,13 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 		folders := api.Group("/folders")
 		{
 			folders.GET("/", s.folderHandler.GetAll)
-			folders.POST("/", s.folderHandler.CreateRootFolder)
+			folders.POST("/", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.CreateRootFolder)
 			folders.GET("/:folderId", s.folderHandler.GetFolder)
-			folders.GET("/root/entries", s.folderHandler.GetRootFolderEntries)
-			folders.PATCH("/:folderId", s.folderHandler.UpdateFolder)
-			folders.DELETE("/:folderId", s.folderHandler.DeleteFolder)
+			folders.GET("/root/entries", s.authMiddleware.Apply(entity.RoleUser, entity.RoleAdmin), s.folderHandler.GetRootFolderEntries)
+			folders.PATCH("/:folderId", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.UpdateFolder)
+			folders.DELETE("/:folderId", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.DeleteFolder)
 			folders.GET("/:folderId/entries", s.folderHandler.GetFoldersEntries)
-			folders.GET("/:folderId/rescan", s.folderHandler.FolderRescan)
+			folders.GET("/:folderId/rescan", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.FolderRescan)
 		}
 
 		api.GET("/scan-jobs/:jobId", s.scanHandler.GetScanJob)

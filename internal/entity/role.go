@@ -5,6 +5,7 @@ type Role string
 const (
 	RoleViewer Role = "viewer"
 	RoleAdmin  Role = "admin"
+	RoleUser   Role = "user"
 )
 
 func (r Role) IsViewer() bool {

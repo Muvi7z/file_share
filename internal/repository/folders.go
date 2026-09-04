@@ -316,7 +316,7 @@ func (r *Repository) updateFolderTx(ctx context.Context, folder entity.UpdateFol
 
 	err = tx.GetContext(ctx, &row, sql, args...)
 	if err != nil {
-		if errors.As(err, &pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Folder{}, entity.ErrorNoRowsFound
 		}
 		return entity.Folder{}, fmt.Errorf("error to executing query: %w", err)

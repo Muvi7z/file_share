@@ -7,6 +7,7 @@ import (
 	"file_share/internal/generator"
 	auth2 "file_share/internal/handler/auth"
 	folder2 "file_share/internal/handler/folder"
+	middleware "file_share/internal/handler/middlewares/auth"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
 	"file_share/internal/repository"
@@ -39,10 +40,11 @@ type Container struct {
 	tokenService  *token.Service
 	authService   *auth.Service
 
-	folderHandler *folder2.Handler
-	videoHandler  *videos.Handler
-	scanHandler   *scan2.Handler
-	authHandler   *auth2.Handler
+	folderHandler  *folder2.Handler
+	videoHandler   *videos.Handler
+	scanHandler    *scan2.Handler
+	authHandler    *auth2.Handler
+	authMiddleware *middleware.Middleware
 
 	fileStorage *storage.Storage
 
@@ -248,6 +250,16 @@ func (c *Container) GetAuthHandler() *auth2.Handler {
 	return c.authHandler
 }
 
+func (c *Container) GetAuthMiddleware() *middleware.Middleware {
+	if c.authMiddleware == nil {
+		c.authMiddleware = middleware.NewMiddleware(
+			c.GetLogger(),
+		)
+	}
+
+	return c.authMiddleware
+}
+
 func (c *Container) GetServer() *server.Server {
 	if c.server == nil {
 
@@ -258,6 +270,7 @@ func (c *Container) GetServer() *server.Server {
 			c.GetLogger(),
 			c.GetServerAddress(),
 			c.GetAuthHandler(),
+			c.GetAuthMiddleware(),
 		)
 	}
 

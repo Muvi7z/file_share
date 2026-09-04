@@ -2,7 +2,7 @@ create table if not exists "user"
 (
     id           text primary key,
     login        text                     not null,
-    passwordHash integer                  not null,
+    password_hash text                    not null,
     role         text,
     created_at   timestamp with time zone not null,
     updated_at   timestamp with time zone not null,

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"file_share/internal/entity"
 	"fmt"
 	"time"
@@ -9,7 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-var userTable = "user"
+var userTable = `"user"`
 
 type userRow struct {
 	Id           string    `db:"id"`
@@ -51,7 +53,7 @@ func (r *Repository) createUserTx(ctx context.Context, tx *sqlx.Tx, user entity.
 		"updated_at":    user.UpdatedAt,
 	}
 
-	sql, args, err := r.qb.Insert(userTable).
+	req, args, err := r.qb.Insert(userTable).
 		SetMap(insertMap).
 		Suffix("RETURNING *").
 		ToSql()
@@ -62,7 +64,7 @@ func (r *Repository) createUserTx(ctx context.Context, tx *sqlx.Tx, user entity.
 	var row userRow
 	var res entity.User
 
-	err = tx.GetContext(ctx, &row, sql, args...)
+	err = tx.GetContext(ctx, &row, req, args...)
 	if err != nil {
 		return entity.User{}, fmt.Errorf("error executing query: %w", err)
 	}
@@ -104,7 +106,7 @@ func (r *Repository) getUserByLoginTx(ctx context.Context, login string, tx *sql
 		"login": login,
 	}
 
-	sql, args, err := r.qb.Select("id").
+	req, args, err := r.qb.Select("id").
 		Columns("login", "password_hash", "role", "created_at", "updated_at").
 		From(userTable).
 		Where(whereMap).
@@ -114,8 +116,12 @@ func (r *Repository) getUserByLoginTx(ctx context.Context, login string, tx *sql
 	}
 
 	var row userRow
-	err = tx.GetContext(ctx, &row, sql, args...)
+	err = tx.GetContext(ctx, &row, req, args...)
 	if err != nil {
+
+		if errors.As(err, &sql.ErrNoRows) {
+			return entity.User{}, err
+		}
 		return entity.User{}, fmt.Errorf("error executing query: %w", err)
 	}
 

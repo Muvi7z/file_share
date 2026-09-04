@@ -51,6 +51,8 @@ func main() {
 
 	log.Info(ctx, "successful migration")
 
+	log.Info(ctx, "successful default admin seed")
+
 	scanService := container.GetScanService()
 	scanDuration := time.Second * 5
 
@@ -61,6 +63,12 @@ func main() {
 		log.Info(ctx, fmt.Sprintf("starting server on %s", container.GetServerAddress()))
 		server.Run(ctx)
 	}()
+
+	err = container.EnsureDefaultAdmin(ctx)
+	if err != nil {
+		log.Error(ctx, errors.Wrap(err, "error during default admin seed"))
+		os.Exit(codeError)
+	}
 
 	// Настраиваем graceful shutdown
 	quit := make(chan os.Signal, 1)

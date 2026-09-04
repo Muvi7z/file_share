@@ -25,7 +25,9 @@ const (
 	envServerPort = "SERVER_PORT"
 	envPosterDir  = "POSTER_DIR"
 
-	envJWTSecret = "JWT_SECRET"
+	envJWTSecret            = "JWT_SECRET"
+	envDefaultAdminLogin    = "DEFAULT_ADMIN_LOGIN"
+	envDefaultAdminPassword = "DEFAULT_ADMIN_PASSWORD"
 )
 
 func newFromEnv() (*configuration, error) {
@@ -101,6 +103,8 @@ func newFromEnv() (*configuration, error) {
 	c.redisConfiguration = rc
 
 	c.jwtSecret = getStringFromEnvOrDefault(envJWTSecret, "default-secret-key-change-me")
+	c.defaultAdminLogin = getStringFromEnvOrDefault(envDefaultAdminLogin, "admin")
+	c.defaultAdminPassword = getStringFromEnvOrDefault(envDefaultAdminPassword, "admin")
 
 	return c, nil
 }
@@ -111,6 +115,8 @@ type configuration struct {
 	redisConfiguration    *redisConfiguration
 	posterDir             string
 	jwtSecret             string
+	defaultAdminLogin     string
+	defaultAdminPassword  string
 }
 
 type redisConfiguration struct {
@@ -177,4 +183,12 @@ func (sc *serverConfiguration) GetAddress() string {
 
 func (c *configuration) GetJWTSecret() string {
 	return c.jwtSecret
+}
+
+func (c *configuration) GetDefaultAdminLogin() string {
+	return c.defaultAdminLogin
+}
+
+func (c *configuration) GetDefaultAdminPassword() string {
+	return c.defaultAdminPassword
 }

@@ -116,17 +116,11 @@ func (c *Client) Del(ctx context.Context, key string) error {
 	})
 }
 
-func (c *Client) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) {
-	var exists bool
+func (c *Client) Expire(ctx context.Context, key string, expiration time.Duration) error {
 	err := c.withConn(ctx, func(ctx context.Context, conn redis.Conn) error {
-		val, err := redis.Bool(conn.Do("EXPIRE", key))
-		if err != nil {
-			return err
-		}
-
-		exists = val
-		return nil
+		_, err := redis.Bool(conn.Do("EXPIRE", key, int(expiration.Seconds())))
+		return err
 	})
 
-	return exists, err
+	return err
 }

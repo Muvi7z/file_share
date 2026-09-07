@@ -10,8 +10,8 @@ type Session struct {
 }
 
 type SessionRedisView struct {
-	Token     string    `redis:"token"`
-	Login     string    `redis:"login"`
-	Role      Role      `redis:"role"`
-	ExpiresAt time.Time `redis:"expires_at"`
+	Token     string `redis:"token"`
+	Login     string `redis:"login"`
+	Role      Role   `redis:"role"`
+	ExpiresAt string `redis:"expires_at"`
 }

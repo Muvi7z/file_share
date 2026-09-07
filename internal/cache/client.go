@@ -12,7 +12,7 @@ type RedisClient interface {
 	HashSet(ctx context.Context, key string, values any) error
 	HGetAll(ctx context.Context, key string) ([]any, error)
 	Del(ctx context.Context, key string) error
-	Expire(ctx context.Context, key string, expiration time.Duration) (bool, error)
+	Expire(ctx context.Context, key string, expiration time.Duration) error
 	SetOperator
 }
 

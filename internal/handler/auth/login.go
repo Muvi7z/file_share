@@ -18,7 +18,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 	session, err := h.authService.Login(ctx, dataRequest)
 	if err != nil {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error to login"})
 		return
 	}
 

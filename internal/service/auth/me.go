@@ -5,16 +5,23 @@ import (
 	"file_share/internal/entity"
 )
 
-func (s *Service) Me(ctx context.Context, token string) (entity.User, error) {
+func (s *Service) Me(ctx context.Context, token string) (entity.MeUser, error) {
 	session, err := s.sessionRepository.GetSession(ctx, token)
 	if err != nil {
-		return entity.User{}, entity.ErrorAuthMe
+		return entity.MeUser{}, entity.ErrorAuthMe
 	}
 
 	user, err := s.userRepository.GetUserByLogin(ctx, session.Login)
 	if err != nil {
-		return entity.User{}, entity.ErrorAuthMe
+		return entity.MeUser{}, entity.ErrorAuthMe
 	}
 
-	return user, nil
+	res := entity.MeUser{
+		Token:     token,
+		Login:     user.Login,
+		Role:      user.Role,
+		ExpiresAt: session.ExpiresAt,
+	}
+
+	return res, nil
 }

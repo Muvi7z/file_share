@@ -19,7 +19,7 @@ type tokenService interface {
 
 type sessionRepository interface {
 	GetSession(ctx context.Context, token string) (entity.Session, error)
-	SetSession(ctx context.Context, key string, session entity.Session) error
+	SetSession(ctx context.Context, key string, session entity.Session, ttl time.Duration) error
 	DeleteSession(ctx context.Context, token string) error
 }
 

@@ -119,7 +119,7 @@ func (r *Repository) getUserByLoginTx(ctx context.Context, login string, tx *sql
 	err = tx.GetContext(ctx, &row, req, args...)
 	if err != nil {
 
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return entity.User{}, err
 		}
 		return entity.User{}, fmt.Errorf("error executing query: %w", err)

@@ -11,6 +11,13 @@ type User struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
+type MeUser struct {
+	Token     string    `json:"token"`
+	Login     string    `json:"login"`
+	Role      Role      `json:"role"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
 type LoginUser struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`

@@ -9,8 +9,6 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
-var sessionTable = "session"
-
 type sessionRow struct {
 	Token     string    `db:"token"`
 	Login     string    `db:"login"`
@@ -18,7 +16,7 @@ type sessionRow struct {
 	ExpiresAt time.Time `db:"expires_at"`
 }
 
-func (r *Repository) SetSession(ctx context.Context, key string, session entity.Session) error {
+func (r *Repository) SetSession(ctx context.Context, key string, session entity.Session, ttl time.Duration) error {
 	cacheKey := r.getCacheKey(key)
 
 	redisView := converter.SessionToRedisView(session)
@@ -28,7 +26,7 @@ func (r *Repository) SetSession(ctx context.Context, key string, session entity.
 		return err
 	}
 
-	return nil
+	return r.cache.Expire(ctx, cacheKey, ttl)
 }
 
 func (r *Repository) GetSession(ctx context.Context, token string) (entity.Session, error) {
@@ -50,7 +48,7 @@ func (r *Repository) GetSession(ctx context.Context, token string) (entity.Sessi
 		return entity.Session{}, err
 	}
 
-	return converter.SessionFromRedisView(sessionView), nil
+	return converter.SessionFromRedisView(sessionView)
 }
 
 func (r *Repository) DeleteSession(ctx context.Context, token string) error {

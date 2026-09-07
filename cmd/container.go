@@ -254,6 +254,7 @@ func (c *Container) GetAuthMiddleware() *middleware.Middleware {
 	if c.authMiddleware == nil {
 		c.authMiddleware = middleware.NewMiddleware(
 			c.GetLogger(),
+			c.GetAuthService(),
 		)
 	}
 

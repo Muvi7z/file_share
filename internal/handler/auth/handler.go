@@ -8,7 +8,7 @@ import (
 
 type authService interface {
 	Login(ctx context.Context, user entity.LoginUser) (entity.Session, error)
-	Me(ctx context.Context, token string) (entity.User, error)
+	Me(ctx context.Context, token string) (entity.MeUser, error)
 }
 
 type Handler struct {

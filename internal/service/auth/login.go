@@ -37,7 +37,7 @@ func (s *Service) Login(ctx context.Context, user entity.LoginUser) (entity.Sess
 		ExpiresAt: time.Now().Add(s.cacheTTL),
 	}
 
-	err = s.sessionRepository.SetSession(ctx, token, session)
+	err = s.sessionRepository.SetSession(ctx, token, session, s.cacheTTL)
 	if err != nil {
 		s.logger.Error(ctx, err)
 		return entity.Session{}, entity.ErrorLoginUser

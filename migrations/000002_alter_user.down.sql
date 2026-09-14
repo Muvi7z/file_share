@@ -1,0 +1,1 @@
+alter table "user" DROP COLUMN status

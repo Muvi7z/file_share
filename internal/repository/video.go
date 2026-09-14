@@ -114,6 +114,83 @@ func (r *Repository) CreateVideo(ctx context.Context, video entity.Video) (entit
 	return res, nil
 }
 
+func (r *Repository) UpdateVideo(ctx context.Context, video entity.Video, id string) (entity.Video, error) {
+	var res entity.Video
+	var txErr, err error
+
+	txErr = sqlxTransaction(ctx, r.conn, func(tx *sqlx.Tx) error {
+		res, err = r.updateVideoTx(ctx, video, id, tx)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		return entity.Video{}, txErr
+	}
+
+	return res, nil
+}
+
+func (r *Repository) updateVideoTx(ctx context.Context, video entity.Video, id string, tx *sqlx.Tx) (entity.Video, error) {
+	updateMap := map[string]any{}
+
+	if video.Path != "" {
+		updateMap["path"] = video.Path
+	}
+
+	if video.Title != "" {
+		updateMap["title"] = video.Title
+	}
+
+	if video.PosterUrl != "" {
+		updateMap["poster_url"] = video.PosterUrl
+	}
+
+	if video.StreamUrl != "" {
+		updateMap["stream_url"] = video.StreamUrl
+	}
+
+	sql, args, err := r.qb.Update(videosTable).
+		SetMap(updateMap).
+		Suffix("RETURNING *").
+		Where(sq.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return entity.Video{}, fmt.Errorf("error to building query: %w", err)
+	}
+
+	var row VideoRow
+
+	err = tx.GetContext(ctx, &row, sql, args...)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return entity.Video{}, err
+		}
+
+		return entity.Video{}, fmt.Errorf("error to update: %w", err)
+	}
+
+	return entity.Video{
+		Id:             row.Id,
+		Title:          row.Title,
+		FolderId:       row.FolderId,
+		FolderName:     row.FolderName,
+		ParentFolderId: row.ParentFolderId,
+		Size:           row.Size,
+		SizeBytes:      row.SizeBytes,
+		Duration:       row.Duration,
+		ModifiedAt:     row.ModifiedAt,
+		Codec:          row.Codec,
+		Resolution:     row.Resolution,
+		PosterUrl:      row.PosterUrl,
+		StreamUrl:      row.StreamUrl,
+		Path:           row.Path,
+	}, nil
+}
+
 func (r *Repository) DeleteVideo(ctx context.Context, id string) error {
 	var txErr, err error
 

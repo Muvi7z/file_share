@@ -1,8 +1,11 @@
 package storage
 
 type Storage struct {
+	PosterPath string
 }
 
-func New() *Storage {
-	return &Storage{}
+func New(PosterPath string) *Storage {
+	return &Storage{
+		PosterPath: PosterPath,
+	}
 }

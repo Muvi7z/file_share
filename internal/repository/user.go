@@ -18,6 +18,7 @@ type userRow struct {
 	Login        string    `db:"login"`
 	PasswordHash string    `db:"password_hash"`
 	Role         string    `db:"role"`
+	Status       string    `db:"status"`
 	CreatedAt    time.Time `db:"created_at"`
 	UpdatedAt    time.Time `db:"updated_at"`
 }
@@ -49,6 +50,7 @@ func (r *Repository) createUserTx(ctx context.Context, tx *sqlx.Tx, user entity.
 		"login":         user.Login,
 		"password_hash": user.PasswordHash,
 		"role":          user.Role,
+		"status":        user.Status,
 		"created_at":    user.CreatedAt,
 		"updated_at":    user.UpdatedAt,
 	}

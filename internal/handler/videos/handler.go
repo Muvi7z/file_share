@@ -11,6 +11,7 @@ type VideoService interface {
 	GetVideoById(ctx context.Context, id string) (entity.Video, error)
 	Stream(ctx context.Context, videoId string) (entity.VideoStream, error)
 	GetPoster(ctx context.Context, id string) (entity.PosterFile, error)
+	UpdatePoster(ctx context.Context, posterFile entity.PosterFile) (string, error)
 }
 
 type Handler struct {

@@ -1,0 +1,1 @@
+alter table "user" ADD COLUMN status text

@@ -27,6 +27,7 @@ type VideoStream struct {
 }
 
 type PosterFile struct {
+	VideoId     string
 	FileName    string
 	ContentType string
 	ModTime     time.Time

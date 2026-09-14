@@ -7,6 +7,7 @@ import (
 	"file_share/internal/entity"
 	video2 "file_share/pkg/utils/video"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 )
@@ -15,11 +16,13 @@ type videoRepository interface {
 	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error)
 	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
 	GetVideoById(ctx context.Context, id string) (entity.Video, error)
+	UpdateVideo(ctx context.Context, video entity.Video, id string) (entity.Video, error)
 }
 
 type fileStorage interface {
 	Open(ctx context.Context, path string) (entity.VideoStream, error)
 	OpenPoster(ctx context.Context, path string) (entity.PosterFile, error)
+	CreatePoster(ctx context.Context, image io.ReadSeeker, path string) error
 }
 
 type posterGenerator interface {
@@ -78,6 +81,34 @@ func (s *Service) GetPoster(ctx context.Context, id string) (entity.PosterFile, 
 	}
 
 	return poster, nil
+}
+
+func (s *Service) UpdatePoster(ctx context.Context, posterFile entity.PosterFile) (string, error) {
+	video, err := s.videoRepository.GetVideoById(ctx, posterFile.VideoId)
+	if err != nil {
+		return "", entity.ErrorGetVideo
+	}
+
+	extention := filepath.Ext(posterFile.FileName)
+
+	_ = extention
+
+	filename := fmt.Sprintf("poster-%s.%s", posterFile.VideoId, "jpg")
+
+	err = s.fileStorage.CreatePoster(ctx, posterFile.Reader, filepath.Join(s.PosterDir, filename))
+	if err != nil {
+		return "", entity.ErrorCreatePoster
+	}
+
+	video.PosterUrl = filepath.Join(s.PosterDir, filename)
+
+	_, err = s.videoRepository.UpdateVideo(ctx, video, posterFile.VideoId)
+	if err != nil {
+		return "", entity.ErrorUpdateVideo
+	}
+
+	return filename, nil
+
 }
 
 func (s *Service) Stream(ctx context.Context, videoId string) (entity.VideoStream, error) {

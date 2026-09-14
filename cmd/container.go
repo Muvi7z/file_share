@@ -150,7 +150,9 @@ func (c *Container) GetAuthService() *auth.Service {
 
 func (c *Container) GetFileStorage() *storage.Storage {
 	if c.fileStorage == nil {
-		c.fileStorage = storage.New()
+		c.fileStorage = storage.New(
+			c.tempDir,
+		)
 	}
 
 	return c.fileStorage

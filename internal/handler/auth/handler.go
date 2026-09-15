@@ -8,6 +8,7 @@ import (
 
 type authService interface {
 	Login(ctx context.Context, user entity.LoginUser) (entity.Session, error)
+	Register(ctx context.Context, user entity.RegisterUser) (string, error)
 	Me(ctx context.Context, token string) (entity.MeUser, error)
 }
 

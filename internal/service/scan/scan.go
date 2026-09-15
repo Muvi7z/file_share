@@ -378,11 +378,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 		_, ok := videosEntries[localVideo.Path]
 		if !ok {
 
-			duration, _ := strconv.ParseFloat(localVideo.Duration, 64)
-
-			halfTime := video2.GetHalfTimeVideo(int64(duration))
-
-			file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, localVideo.Path, localVideo.Id, halfTime)
+			file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, localVideo.Path, localVideo.Id, localVideo.Duration)
 			if err != nil {
 				s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
 				continue

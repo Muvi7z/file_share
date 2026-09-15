@@ -18,7 +18,7 @@ func FormatDuration(totalSeconds int64) string {
 }
 
 func GetHalfTimeVideo(duration int64) string {
-	return FormatDuration(duration / 3)
+	return FormatDuration(duration / 4)
 }
 
 func VideoContentType(fileName string) string {

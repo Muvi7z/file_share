@@ -83,6 +83,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 		authGroup := api.Group("/auth")
 		{
 			authGroup.POST("/login", s.authHandler.Login)
+			authGroup.POST("/register", s.authHandler.Register)
 			authGroup.POST("/me", s.authMiddleware.Apply(entity.RoleUser, entity.RoleAdmin), s.authHandler.Me)
 		}
 

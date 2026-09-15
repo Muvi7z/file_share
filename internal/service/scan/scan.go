@@ -388,6 +388,8 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				return nil, err
 			}
 
+			localVideo.PosterUrl = file.Path
+
 			_, err = s.repository.CreateVideo(ctx, localVideo)
 			if err != nil {
 				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))

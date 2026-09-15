@@ -36,6 +36,7 @@ func (c *Container) EnsureDefaultAdmin(ctx context.Context) error {
 		Id:           uuid.New().String(),
 		Login:        login,
 		PasswordHash: string(passwordHash),
+		Status:       entity.StatusActive,
 		Role:         entity.RoleAdmin,
 		CreatedAt:    now,
 		UpdatedAt:    now,

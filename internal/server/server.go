@@ -94,6 +94,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 			videos.GET("/:videoId/stream", s.videosHandler.Stream)
 			videos.HEAD("/:videoId/stream", s.videosHandler.Stream)
 			videos.GET("/:videoId/poster", s.videosHandler.GetPoster)
+			videos.PUT("/:videoId/poster", s.authMiddleware.Apply(entity.RoleAdmin), s.videosHandler.UpdatePoster)
 
 		}
 

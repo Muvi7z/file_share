@@ -201,5 +201,6 @@ func (g *PosterGenerator) GeneratePosterFFmpeg(ctx context.Context, videoPath, v
 		ContentType: "image/jpeg",
 		ModTime:     stat.ModTime(),
 		Reader:      file,
+		Path:        outPath,
 	}, nil
 }

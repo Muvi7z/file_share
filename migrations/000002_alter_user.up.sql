@@ -1,1 +1,1 @@
-alter table "user" ADD COLUMN "status" text;
+alter table "user" ADD COLUMN status text

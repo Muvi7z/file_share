@@ -1,1 +1,1 @@
-alter table "user" drop column status;
+alter table "user" DROP COLUMN status

@@ -402,6 +402,10 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	return browserFileMap, nil
 }
 
+func (s *Scan) ScanVideo(ctx context.Context, file fs.DirEntry) {
+
+}
+
 func (s *Scan) WorkerFixFastStart(ctx context.Context, jobs <-chan string) {
 	for job := range jobs {
 		s.logger.Info(ctx, fmt.Sprintf("%v: started fix", job))

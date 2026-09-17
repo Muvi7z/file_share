@@ -43,6 +43,7 @@ type FileBrowserEntry struct {
 	Type   string  `json:"type"`
 	Folder *Folder `json:"folder"`
 	Video  *Video  `json:"video"`
+	File   *File   `json:"file"`
 }
 
 type CreateRootFolderRequest struct {

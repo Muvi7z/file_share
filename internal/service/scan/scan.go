@@ -54,6 +54,12 @@ var allowedVideoExts = map[string]bool{
 	".m3u8": true,
 }
 
+var allowedImageExts = map[string]bool{
+	".jpeg": true,
+	".png":  true,
+	".jpg":  true,
+}
+
 type Scan struct {
 	logger            deps.Logger
 	repository        repository
@@ -221,79 +227,41 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 		} else {
 			// Получаем размер файла (требует дополнительного sys call, поэтому вызываем только для файлов)
-			info, _ := d.Info()
-			data, err := ffprobe.GetProbeDataContext(ctx, path)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed walk dir: %s %v", path, err))
-				return nil
-			}
-
 			fileName := filepath.Base(path) // "my_video.mp4"
 
 			// 2. Получаем расширение
 			ext := filepath.Ext(fileName) // ".mp4"
 
-			if !allowedVideoExts[ext] {
-				return nil
-			}
+			if allowedVideoExts[ext] {
+				parentPath := filepath.Dir(path)
 
-			//go func() {
-			//	err := video2.FixFastStart(ctx, path)
-			//	if err != nil {
-			//		s.logger.Error(ctx, fmt.Errorf("%v: failed fix fast start: %v", path, err))
-			//	}
-			//}()
-			jobs <- path
-			// 3. Обрезаем расширение
-			nameWithoutExt := strings.TrimSuffix(fileName, ext)
+				folderEntry, ok := browserFileMap[parentPath]
+				if ok {
+					folderEntry.Folder.VideosCount++
 
-			uuidVideo := uuid.New().String()
-
-			video := entity.Video{
-				Id:         uuidVideo,
-				Title:      nameWithoutExt,
-				PosterUrl:  fmt.Sprintf("/api/videos/%s/poster", uuidVideo),
-				StreamUrl:  fmt.Sprintf("/api/videos/%s/stream", uuidVideo),
-				SizeBytes:  info.Size(),
-				Path:       path,
-				ModifiedAt: info.ModTime(),
-				Size:       data.Format.Size,
-			}
-
-			parentPath := filepath.Dir(path)
-
-			folderEntry, ok := browserFileMap[parentPath]
-			if ok {
-				folderEntry.Folder.VideosCount++
-
-				browserFileMap[parentPath] = folderEntry
-
-				video.ParentFolderId = folderEntry.Folder.Id
-				video.FolderName = folderEntry.Folder.Name
-				video.FolderId = rootFolder.Id
-			}
-
-			for _, stream := range data.Streams {
-				switch stream.CodecType {
-				case "video":
-					video.Codec = stream.CodecName
-					video.Resolution = fmt.Sprintf("%dx%d", stream.Width, stream.Height)
-					video.Size = video2.FormatFileSize(info.Size())
-					duration, err := strconv.Atoi(stream.Duration)
-					if err == nil {
-						video.Duration = video2.FormatDuration(int64(duration))
-					} else {
-						video.Duration = stream.Duration
-					}
-				case "audio":
-				case "subtitle":
+					browserFileMap[parentPath] = folderEntry
 				}
-			}
 
-			localVideos = append(localVideos, video)
-			browserFileMap[path] = entity.FileBrowserEntry{
-				Type:  entity.FileTypeVideo,
-				Video: &video,
+				entityVideo, err := s.ScanVideo(ctx, d, rootFolder.Id, folderEntry, path)
+				if err != nil {
+					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+					return nil
+				}
+
+				localVideos = append(localVideos, *entityVideo.Video)
+				browserFileMap[path] = entityVideo
+
+				jobs <- path
+
+			} else {
+				parentPath := filepath.Dir(path)
+
+				folderEntry, ok := browserFileMap[parentPath]
+				if ok {
+					folderEntry.Folder.FilesCount++
+
+					browserFileMap[parentPath] = folderEntry
+				}
 			}
 
 		}
@@ -402,8 +370,92 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	return browserFileMap, nil
 }
 
-func (s *Scan) ScanVideo(ctx context.Context, file fs.DirEntry) {
+func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, path string) (entity.FileBrowserEntry, error) {
+	info, _ := fileEntry.Info()
+	// 3. Обрезаем расширение
+	fileName := filepath.Base(path)
+	ext := filepath.Ext(fileName) // ".mp4"
+	nameWithoutExt := strings.TrimSuffix(fileName, ext)
 
+	data, err := ffprobe.GetProbeDataContext(ctx, path)
+	if err != nil {
+		s.logger.Error(ctx, fmt.Errorf("failed walk dir: %s %v", path, err))
+		return entity.FileBrowserEntry{}, nil
+	}
+
+	file := entity.File{
+		Id:         uuid.New().String(),
+		Name:       nameWithoutExt,
+		Path:       path,
+		FolderId:   rootFolderId,
+		Size:       data.Format.Size,
+		SizeBytes:  info.Size(),
+		ModifiedAt: info.ModTime(),
+		MimeType:   "",
+	}
+
+	return entity.FileBrowserEntry{
+		Type: "file",
+		File: &file,
+	}, nil
+
+}
+
+func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, path string) (entity.FileBrowserEntry, error) {
+	info, _ := videoFile.Info()
+	fileName := filepath.Base(path)
+	ext := filepath.Ext(fileName) // ".mp4"
+	if !allowedVideoExts[ext] {
+		return entity.FileBrowserEntry{}, nil
+	}
+
+	data, err := ffprobe.GetProbeDataContext(ctx, path)
+	if err != nil {
+		s.logger.Error(ctx, fmt.Errorf("failed walk dir: %s %v", path, err))
+		return entity.FileBrowserEntry{}, nil
+	}
+
+	// 3. Обрезаем расширение
+	nameWithoutExt := strings.TrimSuffix(fileName, ext)
+
+	uuidVideo := uuid.New().String()
+
+	video := entity.Video{
+		Id:         uuidVideo,
+		Title:      nameWithoutExt,
+		PosterUrl:  fmt.Sprintf("/api/videos/%s/poster", uuidVideo),
+		StreamUrl:  fmt.Sprintf("/api/videos/%s/stream", uuidVideo),
+		SizeBytes:  info.Size(),
+		Path:       path,
+		ModifiedAt: info.ModTime(),
+		Size:       data.Format.Size,
+	}
+
+	video.ParentFolderId = folderEntry.Folder.Id
+	video.FolderName = folderEntry.Folder.Name
+	video.FolderId = rootFolderId
+
+	for _, stream := range data.Streams {
+		switch stream.CodecType {
+		case "video":
+			video.Codec = stream.CodecName
+			video.Resolution = fmt.Sprintf("%dx%d", stream.Width, stream.Height)
+			video.Size = video2.FormatFileSize(info.Size())
+			duration, err := strconv.Atoi(stream.Duration)
+			if err == nil {
+				video.Duration = video2.FormatDuration(int64(duration))
+			} else {
+				video.Duration = stream.Duration
+			}
+		case "audio":
+		case "subtitle":
+		}
+	}
+
+	return entity.FileBrowserEntry{
+		Type:  entity.FileTypeVideo,
+		Video: &video,
+	}, nil
 }
 
 func (s *Scan) WorkerFixFastStart(ctx context.Context, jobs <-chan string) {

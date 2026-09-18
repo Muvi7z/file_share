@@ -12,6 +12,7 @@ const (
 const (
 	FileTypeFolder = "folder"
 	FileTypeVideo  = "video"
+	FileTypeOther  = "file"
 )
 
 type ScanJob struct {

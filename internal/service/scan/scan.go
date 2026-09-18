@@ -54,10 +54,13 @@ var allowedVideoExts = map[string]bool{
 	".m3u8": true,
 }
 
-var allowedImageExts = map[string]bool{
-	".jpeg": true,
-	".png":  true,
-	".jpg":  true,
+var allowedImageExts = map[string]string{
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".svg":  "image/svg+xml",
 }
 
 type Scan struct {
@@ -145,8 +148,10 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	browserFileMap := make(map[string]entity.FileBrowserEntry)
 	var localFolders []entity.Folder
 	var localVideos []entity.Video
+	var localFile []entity.File
 	foldersEntries := make(map[string]entity.FileBrowserEntry)
 	videosEntries := make(map[string]entity.FileBrowserEntry)
+	fileEntries := make(map[string]entity.FileBrowserEntry)
 	const numWorkers = 8
 
 	jobs := make(chan string, 200)
@@ -231,8 +236,8 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 			// 2. Получаем расширение
 			ext := filepath.Ext(fileName) // ".mp4"
-
-			if allowedVideoExts[ext] {
+			ok := allowedVideoExts[ext]
+			if ok {
 				parentPath := filepath.Dir(path)
 
 				folderEntry, ok := browserFileMap[parentPath]
@@ -252,8 +257,10 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				browserFileMap[path] = entityVideo
 
 				jobs <- path
-
-			} else {
+				return nil
+			}
+			mime, ok := allowedImageExts[ext]
+			if ok {
 				parentPath := filepath.Dir(path)
 
 				folderEntry, ok := browserFileMap[parentPath]
@@ -262,6 +269,16 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 					browserFileMap[parentPath] = folderEntry
 				}
+
+				entityFile, err := s.ScanFile(ctx, d, rootFolder.Id, folderEntry, mime, path)
+				if err != nil {
+					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+					return nil
+				}
+
+				localFile = append(localFile, *entityFile.File)
+				browserFileMap[path] = entityFile
+				return nil
 			}
 
 		}
@@ -322,6 +339,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 	}
 
+	//удаление видео если видео не найдено в проводнике
 	for _, item := range videos {
 		_, ok := browserFileMap[item.Path]
 		if !ok {
@@ -338,10 +356,12 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 		videosEntries[item.Path] = entity.FileBrowserEntry{
 			Type:   entity.FileTypeVideo,
 			Folder: nil,
+			File:   nil,
 			Video:  &item,
 		}
 	}
 
+	//создание видео если видео не найдено в базе
 	for _, localVideo := range localVideos {
 		_, ok := videosEntries[localVideo.Path]
 		if !ok {
@@ -370,7 +390,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	return browserFileMap, nil
 }
 
-func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, path string) (entity.FileBrowserEntry, error) {
+func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, mime string, path string) (entity.FileBrowserEntry, error) {
 	info, _ := fileEntry.Info()
 	// 3. Обрезаем расширение
 	fileName := filepath.Base(path)
@@ -384,18 +404,20 @@ func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId
 	}
 
 	file := entity.File{
-		Id:         uuid.New().String(),
-		Name:       nameWithoutExt,
-		Path:       path,
-		FolderId:   rootFolderId,
-		Size:       data.Format.Size,
-		SizeBytes:  info.Size(),
-		ModifiedAt: info.ModTime(),
-		MimeType:   "",
+		Id:             uuid.New().String(),
+		Name:           nameWithoutExt,
+		Path:           path,
+		Extension:      ext,
+		FolderId:       rootFolderId,
+		ParentFolderId: folderEntry.Folder.Id,
+		Size:           data.Format.Size,
+		SizeBytes:      info.Size(),
+		ModifiedAt:     info.ModTime(),
+		MimeType:       mime,
 	}
 
 	return entity.FileBrowserEntry{
-		Type: "file",
+		Type: entity.FileTypeOther,
 		File: &file,
 	}, nil
 

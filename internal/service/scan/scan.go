@@ -27,6 +27,9 @@ type repository interface {
 	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
 	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot, enabled *bool) ([]entity.Folder, error)
 	DeleteFolder(ctx context.Context, id string) error
+	GetAllFile(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.File, error)
+	CreateFile(ctx context.Context, file entity.File) (entity.File, error)
+	DeleteFile(ctx context.Context, id string) error
 }
 
 type scanJobRepository interface {
@@ -51,16 +54,6 @@ var allowedVideoExts = map[string]bool{
 	".mpeg": true,
 	".mpg":  true,
 	".3gp":  true,
-	".m3u8": true,
-}
-
-var allowedImageExts = map[string]string{
-	".jpeg": "image/jpeg",
-	".png":  "image/png",
-	".jpg":  "image/jpeg",
-	".gif":  "image/gif",
-	".webp": "image/webp",
-	".svg":  "image/svg+xml",
 }
 
 type Scan struct {
@@ -148,7 +141,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	browserFileMap := make(map[string]entity.FileBrowserEntry)
 	var localFolders []entity.Folder
 	var localVideos []entity.Video
-	var localFile []entity.File
+	var localFiles []entity.File
 	foldersEntries := make(map[string]entity.FileBrowserEntry)
 	videosEntries := make(map[string]entity.FileBrowserEntry)
 	fileEntries := make(map[string]entity.FileBrowserEntry)
@@ -259,27 +252,25 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				jobs <- path
 				return nil
 			}
-			mime, ok := allowedImageExts[ext]
+			//mime, ok := entity.AllowedImageExts[ext]
+			parentPath := filepath.Dir(path)
+
+			folderEntry, ok := browserFileMap[parentPath]
 			if ok {
-				parentPath := filepath.Dir(path)
+				folderEntry.Folder.FilesCount++
 
-				folderEntry, ok := browserFileMap[parentPath]
-				if ok {
-					folderEntry.Folder.FilesCount++
+				browserFileMap[parentPath] = folderEntry
+			}
 
-					browserFileMap[parentPath] = folderEntry
-				}
-
-				entityFile, err := s.ScanFile(ctx, d, rootFolder.Id, folderEntry, mime, path)
-				if err != nil {
-					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
-					return nil
-				}
-
-				localFile = append(localFile, *entityFile.File)
-				browserFileMap[path] = entityFile
+			entityFile, err := s.ScanFile(ctx, d, rootFolder.Id, folderEntry, "", path)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
 				return nil
 			}
+
+			localFiles = append(localFiles, *entityFile.File)
+			browserFileMap[path] = entityFile
+			return nil
 
 		}
 
@@ -387,6 +378,41 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 		}
 	}
 
+	files, err := s.repository.GetAllFile(ctx, "", rootFolder.Id, "", 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files {
+		_, ok := browserFileMap[file.Path]
+		if !ok {
+			err = s.repository.DeleteFile(ctx, file.Id)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed delete file: %v", err))
+				return nil, err
+
+			}
+			continue
+		}
+
+		fileEntries[file.Path] = entity.FileBrowserEntry{
+			Type: entity.FileTypeOther,
+			File: &file,
+		}
+	}
+
+	for _, localFile := range localFiles {
+		_, ok := fileEntries[localFile.Path]
+		if !ok {
+			_, err = s.repository.CreateFile(ctx, localFile)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create file: %v", err))
+				return nil, err
+			}
+			continue
+		}
+	}
+
 	return browserFileMap, nil
 }
 
@@ -397,12 +423,6 @@ func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId
 	ext := filepath.Ext(fileName) // ".mp4"
 	nameWithoutExt := strings.TrimSuffix(fileName, ext)
 
-	data, err := ffprobe.GetProbeDataContext(ctx, path)
-	if err != nil {
-		s.logger.Error(ctx, fmt.Errorf("failed walk dir: %s %v", path, err))
-		return entity.FileBrowserEntry{}, nil
-	}
-
 	file := entity.File{
 		Id:             uuid.New().String(),
 		Name:           nameWithoutExt,
@@ -410,7 +430,7 @@ func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId
 		Extension:      ext,
 		FolderId:       rootFolderId,
 		ParentFolderId: folderEntry.Folder.Id,
-		Size:           data.Format.Size,
+		Size:           video2.FormatFileSize(info.Size()),
 		SizeBytes:      info.Size(),
 		ModifiedAt:     info.ModTime(),
 		MimeType:       mime,

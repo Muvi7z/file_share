@@ -28,12 +28,18 @@ var (
 	ErrorUpdateVideo    = errors.New("error update video")
 	ErrorCreatePoster   = errors.New("error create poster")
 
+	ErrorGetFile    = errors.New("error get file")
+	ErrorDeleteFile = errors.New("error delete file")
+	ErrorUpdateFile = errors.New("error update file")
+	ErrorGetFiles   = errors.New("error get file")
+	ErrorCreateFile = errors.New("error create file")
+
 	ErrorGetUser            = errors.New("error get user")
 	ErrorLoginUser          = errors.New("error login user")
 	ErrorAuthMe             = errors.New("error auth me")
 	ErrorInvalidCredentials = errors.New("invalid credentials")
 
-	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionNotFound = errors.New("cache not found")
 )
 
 type ErrorResponse struct {

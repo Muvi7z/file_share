@@ -114,9 +114,9 @@ func (r *Repository) GetFolders(ctx context.Context, query, rootFolderId, parent
 
 	if query != "" {
 		if whereMap != nil {
-			whereMap = sq.And{whereMap, sq.Like{"title": "%" + query + "%"}}
+			whereMap = sq.And{whereMap, sq.Expr("lower(name) LIKE lower(?)", "%"+query+"%")}
 		} else {
-			whereMap = sq.Like{"title": "%" + query + "%"}
+			whereMap = sq.Expr("lower(name) LIKE lower(?)", "%"+query+"%")
 		}
 
 	}

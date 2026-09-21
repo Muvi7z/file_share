@@ -19,6 +19,10 @@ type videoService interface {
 	GetEntries(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.FileBrowserEntry, error)
 }
 
+type fileService interface {
+	GetEntries(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.FileBrowserEntry, error)
+}
+
 type scanService interface {
 	CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error)
 }
@@ -28,13 +32,15 @@ type Handler struct {
 	folderService folderService
 	videoService  videoService
 	scanService   scanService
+	fileService   fileService
 }
 
-func NewHandler(folderService folderService, videoService videoService, scanService scanService, logger deps.Logger) *Handler {
+func NewHandler(folderService folderService, videoService videoService, scanService scanService, logger deps.Logger, fileService fileService) *Handler {
 	return &Handler{
 		logger:        logger,
 		folderService: folderService,
 		videoService:  videoService,
 		scanService:   scanService,
+		fileService:   fileService,
 	}
 }

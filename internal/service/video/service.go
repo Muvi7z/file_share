@@ -149,7 +149,7 @@ func (s *Service) GetEntries(ctx context.Context, query, rootFolderId, parentFol
 
 	for _, video := range videos {
 		browserEntry := entity.FileBrowserEntry{
-			Type:  "video",
+			Type:  entity.FileTypeVideo,
 			Video: &video,
 		}
 		result = append(result, browserEntry)

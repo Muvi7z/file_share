@@ -40,3 +40,17 @@ type ReadSeekCloser interface {
 	Seek(offset int64, whence int) (int64, error)
 	Close() error
 }
+
+const (
+	RepostTypeOpen     = "open"
+	RepostTypeResolved = "resolved"
+)
+
+type ReportVideo struct {
+	VideoId        string `json:"videoId"`
+	Title          string `json:"title"`
+	Reason         string `json:"reason"`
+	PositionSecond int64  `json:"positionSecond"`
+	Comment        string `json:"comment"`
+	Status         string `json:"status"`
+}

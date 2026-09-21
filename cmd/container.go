@@ -6,14 +6,16 @@ import (
 	redis2 "file_share/internal/cache/redis"
 	"file_share/internal/generator"
 	auth2 "file_share/internal/handler/auth"
+	file2 "file_share/internal/handler/file"
 	folder2 "file_share/internal/handler/folder"
 	middleware "file_share/internal/handler/middlewares/auth"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
 	"file_share/internal/repository"
-	"file_share/internal/repository/session"
+	"file_share/internal/repository/cache"
 	"file_share/internal/server"
 	"file_share/internal/service/auth"
+	"file_share/internal/service/file"
 	"file_share/internal/service/folder"
 	"file_share/internal/service/scan"
 	"file_share/internal/service/token"
@@ -32,16 +34,18 @@ type Container struct {
 	configuration *configuration
 
 	repository        *repository.Repository
-	sessionRepository *session.Repository
+	sessionRepository *cache.Repository
 
 	folderService *folder.Service
 	videoService  *video.Service
 	scanService   *scan.Scan
 	tokenService  *token.Service
 	authService   *auth.Service
+	fileService   *file.Service
 
 	folderHandler  *folder2.Handler
 	videoHandler   *videos.Handler
+	filesHandler   *file2.Handler
 	scanHandler    *scan2.Handler
 	authHandler    *auth2.Handler
 	authMiddleware *middleware.Middleware
@@ -193,6 +197,17 @@ func (c *Container) GetVideoService() *video.Service {
 	return c.videoService
 }
 
+func (c *Container) GetFileService() *file.Service {
+	if c.fileService == nil {
+		c.fileService = file.NewService(
+			c.GetLogger(),
+			c.GetRepository(),
+		)
+	}
+
+	return c.fileService
+}
+
 func (c *Container) GetScanService() *scan.Scan {
 	if c.scanService == nil {
 		c.scanService = scan.New(
@@ -217,6 +232,17 @@ func (c *Container) GetVideoHandler() *videos.Handler {
 	return c.videoHandler
 }
 
+func (c *Container) GetFileHandler() *file2.Handler {
+	if c.filesHandler == nil {
+		c.filesHandler = file2.NewHandler(
+			c.GetFileService(),
+			c.GetLogger(),
+		)
+	}
+
+	return c.filesHandler
+}
+
 func (c *Container) GetScanHandler() *scan2.Handler {
 	if c.scanHandler == nil {
 		c.scanHandler = scan2.NewHandler(
@@ -235,6 +261,7 @@ func (c *Container) GetFolderHandler() *folder2.Handler {
 			c.GetVideoService(),
 			c.GetScanService(),
 			c.GetLogger(),
+			c.GetFileService(),
 		)
 	}
 
@@ -274,15 +301,16 @@ func (c *Container) GetServer() *server.Server {
 			c.GetServerAddress(),
 			c.GetAuthHandler(),
 			c.GetAuthMiddleware(),
+			c.GetFileHandler(),
 		)
 	}
 
 	return c.server
 }
 
-func (c *Container) GetSessionRepository() *session.Repository {
+func (c *Container) GetSessionRepository() *cache.Repository {
 	if c.sessionRepository == nil {
-		c.sessionRepository = session.NewRepository(
+		c.sessionRepository = cache.NewRepository(
 			c.GetRedisClient(),
 		)
 	}

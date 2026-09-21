@@ -6,6 +6,7 @@ import (
 	"file_share/internal/deps"
 	"file_share/internal/entity"
 	"file_share/internal/handler/auth"
+	"file_share/internal/handler/file"
 	"file_share/internal/handler/folder"
 	middleware "file_share/internal/handler/middlewares/auth"
 	"file_share/internal/handler/scan"
@@ -20,17 +21,28 @@ type Server struct {
 	folderHandler  *folder.Handler
 	authHandler    *auth.Handler
 	scanHandler    *scan.Handler
+	fileHandler    *file.Handler
 	logger         deps.Logger
 	addr           string
 	server         *http.Server
 	authMiddleware *middleware.Middleware
 }
 
-func NewServer(videosHandler *videosHandler.Handler, folderHandler *folder.Handler, scanHandler *scan.Handler, logger deps.Logger, addr string, authHandler *auth.Handler, authMiddleware *middleware.Middleware) *Server {
+func NewServer(
+	videosHandler *videosHandler.Handler,
+	folderHandler *folder.Handler,
+	scanHandler *scan.Handler,
+	logger deps.Logger,
+	addr string,
+	authHandler *auth.Handler,
+	authMiddleware *middleware.Middleware,
+	fileHandler *file.Handler,
+) *Server {
 	s := &Server{
 		videosHandler:  videosHandler,
 		folderHandler:  folderHandler,
 		scanHandler:    scanHandler,
+		fileHandler:    fileHandler,
 		logger:         logger,
 		addr:           addr,
 		authHandler:    authHandler,
@@ -100,7 +112,8 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 
 		files := api.Group("/files")
 		{
-			files.GET("/")
+			files.GET("/:id/download", s.fileHandler.Download)
+			files.HEAD("/:id/download", s.fileHandler.Download)
 		}
 
 		folders := api.Group("/folders")

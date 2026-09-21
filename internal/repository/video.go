@@ -48,9 +48,9 @@ func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, paren
 
 	if query != "" {
 		if whereMap != nil {
-			whereMap = sq.And{whereMap, sq.Like{"title": "%" + query + "%"}}
+			whereMap = sq.And{whereMap, sq.Expr("lower(title) LIKE lower(?)", "%"+query+"%")}
 		} else {
-			whereMap = sq.Like{"title": "%" + query + "%"}
+			whereMap = sq.Expr("lower(title) LIKE lower(?)", "%"+query+"%")
 		}
 
 	}

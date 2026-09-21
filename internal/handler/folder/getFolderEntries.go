@@ -31,10 +31,18 @@ func (h *Handler) GetFoldersEntries(c *gin.Context) {
 		return
 	}
 
+	files, err := h.fileService.GetEntries(ctx, query, "", folderId, 0, 0)
+	if err != nil {
+		h.logger.Error(ctx, err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
 	var result []entity.FileBrowserEntry
 
 	result = append(result, folders...)
 	result = append(result, videos...)
+	result = append(result, files...)
 
 	c.JSON(http.StatusOK, result)
 }

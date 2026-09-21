@@ -30,7 +30,7 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
-      summary: Create a user session.
+      summary: Create a user cache.
       description: The backend decides user role and permissions from credentials.
       operationId: login
       requestBody:
@@ -41,7 +41,7 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: User session.
+          description: User cache.
           content:
             application/json:
               schema:
@@ -51,7 +51,7 @@ paths:
   /auth/me:
     get:
       tags: [Auth]
-      summary: Get current user session.
+      summary: Get current user cache.
       operationId: getMe
       security:
         - bearerAuth: []
@@ -122,7 +122,7 @@ paths:
     get:
       tags: [Folders]
       summary: List root file-browser entries.
-      description: Returns root folder visible to the current user. Non-video files must not be returned.
+      description: Returns root folder visible to the current user. Non-video file must not be returned.
       operationId: getRootFolderEntries
       security:
         - {}
@@ -190,7 +190,7 @@ paths:
     delete:
       tags: [Folders]
       summary: Remove a root folder from viewing.
-      description: Requires a role that can manage folder. Deletes metadata from the app only; files on disk must not be deleted.
+      description: Requires a role that can manage folder. Deletes metadata from the app only; file on disk must not be deleted.
       operationId: deleteFolder
       security:
         - bearerAuth: []
@@ -208,7 +208,7 @@ paths:
   /folders/{folderId}/entries:
     get:
       tags: [Folders]
-      summary: List child folder and video files inside a folder.
+      summary: List child folder and video file inside a folder.
       operationId: getFolderEntries
       security:
         - {}
@@ -218,7 +218,7 @@ paths:
         - $ref: "#/components/parameters/SearchQuery"
       responses:
         "200":
-          description: Folder entries. Non-video files must not be returned.
+          description: Folder entries. Non-video file must not be returned.
           content:
             application/json:
               schema:

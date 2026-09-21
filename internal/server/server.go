@@ -103,6 +103,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 		{
 			videos.GET("/", s.videosHandler.GetAll)
 			videos.GET("/:videoId", s.videosHandler.GetVideo)
+			videos.DELETE("/:id", s.videosHandler.DeleteVideo)
 			videos.GET("/:videoId/stream", s.videosHandler.Stream)
 			videos.HEAD("/:videoId/stream", s.videosHandler.Stream)
 			videos.GET("/:videoId/poster", s.videosHandler.GetPoster)
@@ -114,6 +115,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 		{
 			files.GET("/:id/download", s.fileHandler.Download)
 			files.HEAD("/:id/download", s.fileHandler.Download)
+			files.DELETE("/:id", s.fileHandler.DeleteFile)
 		}
 
 		folders := api.Group("/folders")

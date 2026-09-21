@@ -26,6 +26,15 @@ func NewService(logger deps.Logger, fileRepository fileRepository) *Service {
 	}
 }
 
+func (s *Service) DeleteFile(ctx context.Context, id string) error {
+	err := s.fileRepository.DeleteFile(ctx, id)
+	if err != nil {
+		return entity.ErrorDeleteFile
+	}
+
+	return nil
+}
+
 func (s *Service) CreateFile(ctx context.Context, file entity.File) (entity.File, error) {
 	res, err := s.fileRepository.CreateFile(ctx, file)
 	if err != nil {

@@ -27,6 +27,7 @@ var (
 	ErrorGetVideoStream = errors.New("error get video stream")
 	ErrorUpdateVideo    = errors.New("error update video")
 	ErrorCreatePoster   = errors.New("error create poster")
+	ErrorDeletePoster   = errors.New("error delete poster")
 
 	ErrorGetFile    = errors.New("error get file")
 	ErrorDeleteFile = errors.New("error delete file")

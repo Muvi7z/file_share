@@ -12,7 +12,7 @@ import (
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
 	"file_share/internal/repository"
-	"file_share/internal/repository/cache"
+	cacheRepo "file_share/internal/repository/cache"
 	"file_share/internal/server"
 	"file_share/internal/service/auth"
 	"file_share/internal/service/file"
@@ -34,7 +34,7 @@ type Container struct {
 	configuration *configuration
 
 	repository        *repository.Repository
-	sessionRepository *cache.Repository
+	sessionRepository *cacheRepo.Repository
 
 	folderService *folder.Service
 	videoService  *video.Service
@@ -308,9 +308,9 @@ func (c *Container) GetServer() *server.Server {
 	return c.server
 }
 
-func (c *Container) GetSessionRepository() *cache.Repository {
+func (c *Container) GetSessionRepository() *cacheRepo.Repository {
 	if c.sessionRepository == nil {
-		c.sessionRepository = cache.NewRepository(
+		c.sessionRepository = cacheRepo.NewRepository(
 			c.GetRedisClient(),
 		)
 	}

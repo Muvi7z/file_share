@@ -11,6 +11,7 @@ type fileService interface {
 	GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit int, offset int) ([]entity.File, error)
 	GetEntries(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.FileBrowserEntry, error)
 	GetFileById(ctx context.Context, id string) (entity.File, error)
+	DeleteFile(ctx context.Context, id string) error
 }
 
 type Handler struct {

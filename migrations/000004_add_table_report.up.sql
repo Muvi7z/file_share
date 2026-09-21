@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 
-create table if not exists report
+create table if not exists report_video
 (
     id           text primary key,
     name        text                     not null,

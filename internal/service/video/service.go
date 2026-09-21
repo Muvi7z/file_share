@@ -8,6 +8,7 @@ import (
 	video2 "file_share/pkg/utils/video"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 )
@@ -17,6 +18,7 @@ type videoRepository interface {
 	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
 	GetVideoById(ctx context.Context, id string) (entity.Video, error)
 	UpdateVideo(ctx context.Context, video entity.Video, id string) (entity.Video, error)
+	DeleteVideo(ctx context.Context, id string) error
 }
 
 type fileStorage interface {
@@ -45,6 +47,23 @@ func NewService(videoRepository videoRepository, fileStorage fileStorage, poster
 		posterGenerator: posterGenerator,
 		PosterDir:       PosterDir,
 	}
+}
+
+func (s *Service) DeleteVideo(ctx context.Context, id string) error {
+	//s.videoRepository
+
+	video, err := s.videoRepository.GetVideoById(ctx, id)
+	if err != nil {
+		return entity.ErrorNotFoundVideo
+	}
+
+	err = os.Remove(video.PosterUrl)
+	if err != nil {
+		return entity.ErrorDeletePoster
+	}
+	//удалить постер
+
+	return nil
 }
 
 func (s *Service) CreateVideo(ctx context.Context, videoReq entity.Video) (entity.Video, error) {

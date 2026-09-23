@@ -43,14 +43,27 @@ type ReadSeekCloser interface {
 
 const (
 	RepostTypeOpen     = "open"
+	RepostTypeAuto     = "auto"
 	RepostTypeResolved = "resolved"
 )
 
 type ReportVideo struct {
-	VideoId        string `json:"videoId"`
-	Title          string `json:"title"`
-	Reason         string `json:"reason"`
-	PositionSecond int64  `json:"positionSecond"`
-	Comment        string `json:"comment"`
-	Status         string `json:"status"`
+	Id             string    `json:"id"`
+	VideoId        string    `json:"videoId"`
+	Title          string    `json:"title"`
+	Reason         string    `json:"reason"`
+	PositionSecond int64     `json:"positionSecond"`
+	Comment        string    `json:"comment"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+type CreateReportVideo struct {
+	VideoId        string    `json:"videoId"`
+	Title          string    `json:"title"`
+	Reason         string    `json:"reason"`
+	PositionSecond int64     `json:"positionSecond"`
+	Comment        string    `json:"comment"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"createdAt"`
 }

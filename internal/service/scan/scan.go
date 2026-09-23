@@ -448,13 +448,13 @@ func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderI
 	fileName := filepath.Base(path)
 	ext := filepath.Ext(fileName) // ".mp4"
 	if !allowedVideoExts[ext] {
-		return entity.FileBrowserEntry{}, nil
+		return entity.FileBrowserEntry{}, errors.New("error extension not allowed")
 	}
 
 	data, err := ffprobe.GetProbeDataContext(ctx, path)
 	if err != nil {
 		s.logger.Error(ctx, fmt.Errorf("failed walk dir: %s %v", path, err))
-		return entity.FileBrowserEntry{}, nil
+		return entity.FileBrowserEntry{}, err
 	}
 
 	// 3. Обрезаем расширение
@@ -501,13 +501,13 @@ func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderI
 }
 
 func (s *Scan) WorkerFixFastStart(ctx context.Context, jobs <-chan string) {
-	for job := range jobs {
-		s.logger.Info(ctx, fmt.Sprintf("%v: started fix", job))
-		err := video2.FixFastStart(ctx, job)
-		if err != nil {
-			s.logger.Error(ctx, fmt.Errorf("%v: failed fix fast start: %v", job, err))
-		}
-		s.logger.Info(ctx, fmt.Sprintf("%v: end fix", job))
-	}
+	//for job := range jobs {
+	//	s.logger.Info(ctx, fmt.Sprintf("%v: started fix", job))
+	//	err := video2.FixFastStart(ctx, job)
+	//	if err != nil {
+	//		s.logger.Error(ctx, fmt.Errorf("%v: failed fix fast start: %v", job, err))
+	//	}
+	//	s.logger.Info(ctx, fmt.Sprintf("%v: end fix", job))
+	//}
 
 }

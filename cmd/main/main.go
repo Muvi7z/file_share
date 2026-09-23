@@ -58,6 +58,10 @@ func main() {
 
 	scanService.StartProcessScan(ctx, scanDuration)
 
+	videoFixer := container.GetVideoFixer()
+	videoFixerDuration := time.Second * 5
+	videoFixer.StartProcessFix(ctx, videoFixerDuration)
+
 	server := container.GetServer()
 	go func() {
 		log.Info(ctx, fmt.Sprintf("starting server on %s", container.GetServerAddress()))

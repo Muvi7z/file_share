@@ -9,6 +9,7 @@ import (
 	"file_share/internal/handler/file"
 	"file_share/internal/handler/folder"
 	middleware "file_share/internal/handler/middlewares/auth"
+	"file_share/internal/handler/report"
 	"file_share/internal/handler/scan"
 	videosHandler "file_share/internal/handler/videos"
 	"net/http"
@@ -26,6 +27,7 @@ type Server struct {
 	addr           string
 	server         *http.Server
 	authMiddleware *middleware.Middleware
+	reportHandler  *report.Handler
 }
 
 func NewServer(
@@ -37,6 +39,7 @@ func NewServer(
 	authHandler *auth.Handler,
 	authMiddleware *middleware.Middleware,
 	fileHandler *file.Handler,
+	reportHandler *report.Handler,
 ) *Server {
 	s := &Server{
 		videosHandler:  videosHandler,
@@ -47,6 +50,7 @@ func NewServer(
 		addr:           addr,
 		authHandler:    authHandler,
 		authMiddleware: authMiddleware,
+		reportHandler:  reportHandler,
 	}
 
 	router := s.Register(gin.Default())
@@ -108,6 +112,8 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 			videos.HEAD("/:videoId/stream", s.videosHandler.Stream)
 			videos.GET("/:videoId/poster", s.videosHandler.GetPoster)
 			videos.PUT("/:videoId/poster", s.authMiddleware.Apply(entity.RoleAdmin), s.videosHandler.UpdatePoster)
+			videos.POST("/reports", s.reportHandler.Create)
+			videos.PATCH("/reports", s.authMiddleware.Apply(entity.RoleAdmin), s.reportHandler.Update)
 
 		}
 

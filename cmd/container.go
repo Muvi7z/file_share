@@ -9,6 +9,7 @@ import (
 	file2 "file_share/internal/handler/file"
 	folder2 "file_share/internal/handler/folder"
 	middleware "file_share/internal/handler/middlewares/auth"
+	report2 "file_share/internal/handler/report"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
 	"file_share/internal/repository"
@@ -17,9 +18,11 @@ import (
 	"file_share/internal/service/auth"
 	"file_share/internal/service/file"
 	"file_share/internal/service/folder"
+	"file_share/internal/service/report"
 	"file_share/internal/service/scan"
 	"file_share/internal/service/token"
 	"file_share/internal/service/video"
+	"file_share/internal/service/videoFixer"
 	"file_share/internal/storage"
 	"file_share/migrations"
 	"file_share/pkg/logger"
@@ -36,13 +39,16 @@ type Container struct {
 	repository        *repository.Repository
 	sessionRepository *cacheRepo.Repository
 
-	folderService *folder.Service
-	videoService  *video.Service
-	scanService   *scan.Scan
-	tokenService  *token.Service
-	authService   *auth.Service
-	fileService   *file.Service
+	folderService   *folder.Service
+	videoService    *video.Service
+	scanService     *scan.Scan
+	videoFixService *videoFixer.VideoFixer
+	tokenService    *token.Service
+	authService     *auth.Service
+	fileService     *file.Service
+	reportService   *report.Service
 
+	reportHandler  *report2.Handler
 	folderHandler  *folder2.Handler
 	videoHandler   *videos.Handler
 	filesHandler   *file2.Handler
@@ -221,6 +227,40 @@ func (c *Container) GetScanService() *scan.Scan {
 	return c.scanService
 }
 
+func (c *Container) GetVideoFixer() *videoFixer.VideoFixer {
+	if c.videoFixService == nil {
+		c.videoFixService = videoFixer.New(
+			c.GetLogger(),
+			c.GetRepository(),
+		)
+	}
+
+	return c.videoFixService
+}
+
+func (c *Container) GetReportVideoService() *report.Service {
+	if c.reportService == nil {
+		c.reportService = report.NewService(
+			c.GetLogger(),
+			c.GetRepository(),
+			c.GetRepository(),
+		)
+	}
+
+	return c.reportService
+}
+
+func (c *Container) GetReportVideoHandler() *report2.Handler {
+	if c.reportHandler == nil {
+		c.reportHandler = report2.NewHandler(
+			c.GetReportVideoService(),
+			c.GetLogger(),
+		)
+	}
+
+	return c.reportHandler
+}
+
 func (c *Container) GetVideoHandler() *videos.Handler {
 	if c.videoHandler == nil {
 		c.videoHandler = videos.NewHandler(
@@ -302,6 +342,7 @@ func (c *Container) GetServer() *server.Server {
 			c.GetAuthHandler(),
 			c.GetAuthMiddleware(),
 			c.GetFileHandler(),
+			c.GetReportVideoHandler(),
 		)
 	}
 

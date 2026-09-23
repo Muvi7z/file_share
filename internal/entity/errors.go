@@ -26,6 +26,7 @@ var (
 	ErrorGetVideo       = errors.New("error get video")
 	ErrorGetVideoStream = errors.New("error get video stream")
 	ErrorUpdateVideo    = errors.New("error update video")
+	ErrorDeleteVideo    = errors.New("error delete video")
 	ErrorCreatePoster   = errors.New("error create poster")
 	ErrorDeletePoster   = errors.New("error delete poster")
 
@@ -41,6 +42,11 @@ var (
 	ErrorInvalidCredentials = errors.New("invalid credentials")
 
 	ErrSessionNotFound = errors.New("cache not found")
+
+	ErrorReportVideoCreate = errors.New("error report video create")
+	ErrorReportVideoDelete = errors.New("error report video delete")
+	ErrorReportVideoUpdate = errors.New("error report video update")
+	ErrorReportVideoGet    = errors.New("error report video get")
 )
 
 type ErrorResponse struct {

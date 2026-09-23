@@ -1,20 +1,13 @@
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-
 create table if not exists report_video
 (
-    id           text primary key,
-    name        text                     not null,
-    path text                    not null,
-    extension         text,
-    folder_id         text,
-    folder_name text,
-    parent_folder_id         text,
-    size         text,
-    size_bytes         BIGINT,
-    modified_at   timestamp with time zone not null,
-    FOREIGN KEY (folder_id) REFERENCES folder (id)
-        ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (parent_folder_id) REFERENCES folder (id)
+    id              text primary key,
+    reason          text not null,
+    title           text not null,
+    video_id        text,
+    position_second BIGINT,
+    comment         text,
+    status          text,
+    created_at timestamp with time zone,
+    FOREIGN KEY (video_id) REFERENCES video (id)
         ON DELETE CASCADE ON UPDATE CASCADE
 );

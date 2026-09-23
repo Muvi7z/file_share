@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -190,31 +191,45 @@ func FixFastStart(ctx context.Context, inputPath string) error {
 		//if err != nil {
 		//	return err
 		//} else if fastStartInfo.NeedsFastStart {
-		//	dir := filepath.Dir(inputPath)
-		//	ext := filepath.Ext(inputPath)
-		//	base := inputPath[:len(inputPath)-len(ext)]
+		dir := filepath.Dir(inputPath)
+		ext := filepath.Ext(inputPath)
+		base := inputPath[:len(inputPath)-len(ext)]
+
+		tmpPath := base + ".fixed" + ext
+		//backupPath := base + ".backup" + ext
+		//	ffmpeg -i 'D:\OVERLORD [TV-2] [2018] [WEB-DL] [1080p] [RUS + JAP]\SaveStar\ioi\SSIS-854.mp4' `
+		//-map 0:v:0 -map '0:a?' -map_metadata 0 `
+		//	-vf 'setpts=N*1001/(60000*TB)' `
+		//-r 60000/1001 -fps_mode:v cfr `
+		//	-c:v libx264 -preset medium -crf 18 `
+		//-c:a copy -movflags +faststart `
+		//	'D:\OVERLORD [TV-2] [2018] [WEB-DL] [1080p] [RUS + JAP]\SaveStar\ioi\SSIS-854-fixed.mp4'
+		cmd := exec.CommandContext(
+			ctx,
+			"ffmpeg",
+			"-i", inputPath,
+			"-map", "0:v:0",
+			"-map", "0:a?",
+			"-map_metadata", "0",
+			"-vf", "setpts=N*1001/(60000*TB)",
+			"-fps_mode:v", "cfr",
+
+			"-c:v", "libx264",
+			"-preset", "medium",
+			"-crf", "20",
+			"-c:a", "copy",
+			"-movflags", "+faststart",
+			tmpPath,
+		)
 		//
-		//	tmpPath := base + ".faststart.tmp" + ext
-		//	backupPath := base + ".backup" + ext
-		//
-		//	cmd := exec.CommandContext(
-		//		ctx,
-		//		"ffmpeg",
-		//		"-y",
-		//		"-i", inputPath,
-		//		"-c", "copy",
-		//		"-movflags", "+faststart",
-		//		tmpPath,
-		//	)
-		//
-		//	cmd.Dir = dir
-		//
-		//	output, err := cmd.CombinedOutput()
-		//	if err != nil {
-		//		_ = os.Remove(tmpPath)
-		//		return fmt.Errorf("ffmpeg faststart failed: %w: %s", err, string(output))
-		//	}
-		//
+		cmd.Dir = dir
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("ffmpeg faststart failed: %w: %s", err, string(output))
+		}
+
 		//	if err := os.Rename(inputPath, backupPath); err != nil {
 		//		_ = os.Remove(tmpPath)
 		//		return err

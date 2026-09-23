@@ -59,8 +59,21 @@ func (s *Service) DeleteVideo(ctx context.Context, id string) error {
 
 	err = os.Remove(video.PosterUrl)
 	if err != nil {
-		return entity.ErrorDeletePoster
+		if errors.Is(err, os.ErrNotExist) {
+
+		} else {
+			s.logger.Error(ctx, err)
+			return entity.ErrorDeletePoster
+		}
+
 	}
+
+	err = s.videoRepository.DeleteVideo(ctx, id)
+	if err != nil {
+		s.logger.Error(ctx, err)
+		return entity.ErrorDeleteVideo
+	}
+
 	//удалить постер
 
 	return nil

@@ -145,14 +145,6 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	foldersEntries := make(map[string]entity.FileBrowserEntry)
 	videosEntries := make(map[string]entity.FileBrowserEntry)
 	fileEntries := make(map[string]entity.FileBrowserEntry)
-	const numWorkers = 8
-
-	jobs := make(chan string, 200)
-
-	// Запускаем фиксированный пул воркеров.
-	for w := 1; w <= numWorkers; w++ {
-		go s.WorkerFixFastStart(ctx, jobs)
-	}
 
 	folders, err := s.repository.GetFolders(ctx, "", rootFolder.Id, "", nil, nil)
 	if err != nil {
@@ -249,7 +241,6 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 				localVideos = append(localVideos, *entityVideo.Video)
 				browserFileMap[path] = entityVideo
 
-				jobs <- path
 				return nil
 			}
 			//mime, ok := entity.AllowedImageExts[ext]
@@ -276,7 +267,6 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 		return nil // Продолжаем обход
 	})
-	close(jobs)
 	if err != nil {
 		return nil, err
 	}
@@ -498,16 +488,4 @@ func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderI
 		Type:  entity.FileTypeVideo,
 		Video: &video,
 	}, nil
-}
-
-func (s *Scan) WorkerFixFastStart(ctx context.Context, jobs <-chan string) {
-	//for job := range jobs {
-	//	s.logger.Info(ctx, fmt.Sprintf("%v: started fix", job))
-	//	err := video2.FixFastStart(ctx, job)
-	//	if err != nil {
-	//		s.logger.Error(ctx, fmt.Errorf("%v: failed fix fast start: %v", job, err))
-	//	}
-	//	s.logger.Info(ctx, fmt.Sprintf("%v: end fix", job))
-	//}
-
 }

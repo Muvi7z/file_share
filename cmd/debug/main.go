@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"file_share/internal/handler/infrastructure/ffmpeg"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 )
 
@@ -101,15 +101,8 @@ func checkVOD(vodID string) (string, error) {
 }
 
 func main() {
+	fmp := ffmpeg.NewFFMPEG("C:\\Users\\Ochir\\Videos\\temp")
 
-	vodID := "2012345678"
+	fmp.GetAudioTrack("C:\\Users\\Ochir\\Videos\\temp\\Obsession.2025.MA.x265.WEB-DL.2160p.SDR.mkv")
 
-	m3u8URL, err := checkVOD(vodID)
-	if err != nil {
-		fmt.Printf("VOD %s: %v\n", vodID, err)
-		os.Exit(1)
-	}
-
-	fmt.Println("m3u8 найден:")
-	fmt.Println(m3u8URL)
 }

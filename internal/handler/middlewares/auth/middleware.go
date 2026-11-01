@@ -5,10 +5,11 @@ import (
 	"file_share/internal/deps"
 	"file_share/internal/entity"
 	"file_share/internal/service/roles"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Middleware struct {
@@ -56,12 +57,17 @@ func (m *Middleware) Apply(allowed ...entity.Role) gin.HandlerFunc {
 
 		if len(header) == 0 {
 			_, ok := roleList[entity.RoleViewer]
-			if !ok {
-				c.AbortWithStatusJSON(403, gin.H{
-					"error": "forbidden",
-				})
+			if ok {
+				ctx = context.WithValue(ctx, "role", entity.RoleViewer)
+				c.Request = c.Request.WithContext(ctx)
+				c.Next()
 				return
 			}
+
+			c.AbortWithStatusJSON(403, gin.H{
+				"error": "forbidden",
+			})
+			return
 		}
 
 		parts := strings.Split(header, " ")

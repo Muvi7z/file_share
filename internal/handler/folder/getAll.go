@@ -1,6 +1,7 @@
 package folder
 
 import (
+	"file_share/internal/entity"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,15 @@ func (h *Handler) GetAll(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	folders, err := h.folderService.GetFolders(ctx, rootFolderId, parentFolderId, query, nil)
+	role := ctx.Value("role")
+
+	var enabled *bool
+	if entity.RoleViewer == role {
+		enabledLiteral := true
+		enabled = &enabledLiteral
+	}
+
+	folders, err := h.folderService.GetFolders(ctx, rootFolderId, parentFolderId, query, nil, enabled)
 	if err != nil {
 		h.logger.Error(ctx, err)
 		c.AbortWithStatus(http.StatusInternalServerError)

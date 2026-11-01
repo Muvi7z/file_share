@@ -37,7 +37,15 @@ func (h *Handler) GetAll(c *gin.Context) {
 		}
 	}
 
-	videos, err := h.videoService.GetAll(ctx, query, rootFolderId, parentFolderId, iLimit, iOffset)
+	role := ctx.Value("role")
+
+	var enabled *bool
+	if entity.RoleViewer == role {
+		enabledLiteral := true
+		enabled = &enabledLiteral
+	}
+
+	videos, err := h.videoService.GetAll(ctx, query, rootFolderId, parentFolderId, iLimit, iOffset, enabled)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, entity.ErrorResponse{Message: err.Error(), Code: "500"})
 		return

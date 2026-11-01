@@ -14,7 +14,7 @@ import (
 )
 
 type videoRepository interface {
-	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error)
+	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64, enabled *bool) ([]entity.Video, error)
 	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
 	GetVideoById(ctx context.Context, id string) (entity.Video, error)
 	UpdateVideo(ctx context.Context, video entity.Video, id string) (entity.Video, error)
@@ -28,7 +28,7 @@ type fileStorage interface {
 }
 
 type posterGenerator interface {
-	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
+	GeneratePosterFFMPEG(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
 }
 
 type Service struct {
@@ -90,7 +90,7 @@ func (s *Service) CreateVideo(ctx context.Context, videoReq entity.Video) (entit
 
 	halfTime := video2.GetHalfTimeVideo(int64(duration))
 
-	_, err = s.posterGenerator.GeneratePosterFFmpeg(ctx, video.Path, video.Id, halfTime)
+	_, err = s.posterGenerator.GeneratePosterFFMPEG(ctx, video.Path, video.Id, halfTime)
 	if err != nil {
 		s.logger.Error(ctx, fmt.Errorf("failed generate poster: %v", err))
 		return entity.Video{}, entity.ErrorCreateVideo
@@ -158,12 +158,12 @@ func (s *Service) Stream(ctx context.Context, videoId string) (entity.VideoStrea
 
 }
 
-func (s *Service) GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit int, offset int) ([]entity.Video, error) {
+func (s *Service) GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit int, offset int, enabled *bool) ([]entity.Video, error) {
 
 	uLimit := uint64(limit)
 	uOffset := uint64(offset)
 
-	result, err := s.videoRepository.GetAllVideo(ctx, query, rootFolderId, parentFolderId, uLimit, uOffset)
+	result, err := s.videoRepository.GetAllVideo(ctx, query, rootFolderId, parentFolderId, uLimit, uOffset, enabled)
 	if err != nil {
 		return nil, entity.ErrorGetVideos
 	}
@@ -172,7 +172,7 @@ func (s *Service) GetAll(ctx context.Context, query, rootFolderId, parentFolderI
 }
 
 func (s *Service) GetEntries(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.FileBrowserEntry, error) {
-	videos, err := s.videoRepository.GetAllVideo(ctx, query, rootFolderId, parentFolderId, limit, offset)
+	videos, err := s.videoRepository.GetAllVideo(ctx, query, rootFolderId, parentFolderId, limit, offset, nil)
 	if err != nil {
 		return nil, entity.ErrorGetVideosEntries
 	}

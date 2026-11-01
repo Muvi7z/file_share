@@ -22,7 +22,7 @@ type repository interface {
 	GetFolderById(ctx context.Context, id string) (entity.Folder, error)
 	CreateFolder(ctx context.Context, folder entity.Folder) (entity.Folder, error)
 	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
-	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error)
+	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64, enabled *bool) ([]entity.Video, error)
 	DeleteVideo(ctx context.Context, id string) error
 	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
 	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot, enabled *bool) ([]entity.Folder, error)
@@ -39,21 +39,21 @@ type scanJobRepository interface {
 }
 
 type posterGenerator interface {
-	GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
+	GeneratePosterFFMPEG(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
 }
 
-var allowedVideoExts = map[string]bool{
-	".mp4":  true,
-	".avi":  true,
-	".mkv":  true,
-	".mov":  true,
-	".webm": true,
-	".flv":  true,
-	".wmv":  true,
-	".m4v":  true,
-	".mpeg": true,
-	".mpg":  true,
-	".3gp":  true,
+var allowedVideoExtension = map[string]bool{
+	".mp4":     true,
+	".avi":     true,
+	entity.MKV: true,
+	".mov":     true,
+	".webm":    true,
+	".flv":     true,
+	".wmv":     true,
+	".m4v":     true,
+	".mpeg":    true,
+	".mpg":     true,
+	".3gp":     true,
 }
 
 type Scan struct {
@@ -221,7 +221,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 			// 2. Получаем расширение
 			ext := filepath.Ext(fileName) // ".mp4"
-			ok := allowedVideoExts[ext]
+			ok := allowedVideoExtension[ext]
 			if ok {
 				parentPath := filepath.Dir(path)
 
@@ -314,10 +314,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 	}
 
-	videos, err := s.repository.GetAllVideo(ctx, "", rootFolder.Id, "", 0, 0)
+	videos, err := s.repository.GetAllVideo(ctx, "", rootFolder.Id, "", 0, 0, nil)
 	if err != nil {
 		return nil, err
-
 	}
 
 	//удаление видео если видео не найдено в проводнике
@@ -347,7 +346,11 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 		_, ok := videosEntries[localVideo.Path]
 		if !ok {
 
-			file, err := s.posterGenerator.GeneratePosterFFmpeg(ctx, localVideo.Path, localVideo.Id, localVideo.Duration)
+			if strings.EqualFold(localVideo.Extension, entity.MKV) {
+
+			}
+
+			file, err := s.posterGenerator.GeneratePosterFFMPEG(ctx, localVideo.Path, localVideo.Id, localVideo.Duration)
 			if err != nil {
 				s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
 				continue
@@ -406,7 +409,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	return browserFileMap, nil
 }
 
-func (s *Scan) ScanFile(ctx context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, mime string, path string) (entity.FileBrowserEntry, error) {
+func (s *Scan) ScanFile(_ context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, mime string, path string) (entity.FileBrowserEntry, error) {
 	info, _ := fileEntry.Info()
 	// 3. Обрезаем расширение
 	fileName := filepath.Base(path)
@@ -437,7 +440,7 @@ func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderI
 	info, _ := videoFile.Info()
 	fileName := filepath.Base(path)
 	ext := filepath.Ext(fileName) // ".mp4"
-	if !allowedVideoExts[ext] {
+	if !allowedVideoExtension[ext] {
 		return entity.FileBrowserEntry{}, errors.New("error extension not allowed")
 	}
 
@@ -461,6 +464,7 @@ func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderI
 		Path:       path,
 		ModifiedAt: info.ModTime(),
 		Size:       data.Format.Size,
+		Extension:  ext,
 	}
 
 	video.ParentFolderId = folderEntry.Folder.Id

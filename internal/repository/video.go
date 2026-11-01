@@ -26,12 +26,13 @@ type VideoRow struct {
 	Resolution     string    `db:"resolution"`
 	PosterUrl      string    `db:"poster_url"`
 	StreamUrl      string    `db:"stream_url"`
+	Extension      string    `db:"extension"`
 	Path           string    `db:"path"`
 }
 
 const videosTable = "video"
 
-func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.Video, error) {
+func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64, enabled *bool) ([]entity.Video, error) {
 	var whereMap sq.Sqlizer
 
 	if rootFolderId != "" {
@@ -55,12 +56,17 @@ func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, paren
 
 	}
 
-	sql, args, err := r.qb.Select("id").
-		Columns("title", "folder_id", "folder_name", "parent_folder_id", "size", "size_bytes", "duration", "modified_at", "codec", "resolution", "poster_url", "stream_url", "path").
-		From(videosTable).
+	querySql := r.qb.Select("v.id").
+		Columns("v.title", "v.folder_id", "v.folder_name", "v.parent_folder_id", "v.size", "v.size_bytes", "v.duration", "v.modified_at", "v.codec", "v.resolution", "v.poster_url", "v.stream_url", "v.path").
+		From(fmt.Sprintf("%s v", videosTable)).
 		Where(whereMap).
-		Offset(offset).
-		ToSql()
+		Offset(offset)
+
+	if enabled != nil {
+		querySql = querySql.Join("folder f on f.id = v.folder_id").Where(sq.Eq{"f.enabled": *enabled})
+	}
+
+	sql, args, err := querySql.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("error to building query: %w", err)
 	}
@@ -89,6 +95,7 @@ func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, paren
 			PosterUrl:      row.PosterUrl,
 			StreamUrl:      row.StreamUrl,
 			Path:           row.Path,
+			Extension:      row.Extension,
 		})
 	}
 
@@ -187,6 +194,7 @@ func (r *Repository) updateVideoTx(ctx context.Context, video entity.Video, id s
 		Resolution:     row.Resolution,
 		PosterUrl:      row.PosterUrl,
 		StreamUrl:      row.StreamUrl,
+		Extension:      row.Extension,
 		Path:           row.Path,
 	}, nil
 }
@@ -304,6 +312,7 @@ func (r *Repository) createVideoTx(ctx context.Context, video entity.Video, tx *
 		"resolution":       video.Resolution,
 		"poster_url":       video.PosterUrl,
 		"stream_url":       video.StreamUrl,
+		"extension":        video.Extension,
 		"path":             video.Path,
 	}
 
@@ -338,6 +347,7 @@ func (r *Repository) createVideoTx(ctx context.Context, video entity.Video, tx *
 		StreamUrl:      row.StreamUrl,
 		Path:           row.Path,
 		ModifiedAt:     row.ModifiedAt,
+		Extension:      row.Extension,
 	}
 
 	return result, nil
@@ -347,8 +357,7 @@ func (r *Repository) GetVideoById(ctx context.Context, id string) (entity.Video,
 	whereMap := map[string]any{
 		"id": id,
 	}
-	sql, args, err := r.qb.Select("id").
-		Columns("title", "folder_id", "folder_name", "parent_folder_id", "size", "size_bytes", "duration", "modified_at", "codec", "resolution", "poster_url", "stream_url", "path").
+	sql, args, err := r.qb.Select("*").
 		From(videosTable).
 		Where(whereMap).
 		ToSql()
@@ -381,5 +390,6 @@ func (r *Repository) GetVideoById(ctx context.Context, id string) (entity.Video,
 		PosterUrl:      row.PosterUrl,
 		StreamUrl:      row.StreamUrl,
 		Path:           row.Path,
+		Extension:      row.Extension,
 	}, nil
 }

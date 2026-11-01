@@ -7,7 +7,7 @@ import (
 )
 
 type folderService interface {
-	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool) ([]entity.Folder, error)
+	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool, enabled *bool) ([]entity.Folder, error)
 	GetFoldersEntries(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool) ([]entity.FileBrowserEntry, error)
 	CreateFolderRootFolder(ctx context.Context, path string) (entity.CreateRootFolderResponse, error)
 	GetFolder(ctx context.Context, folderId string) (entity.Folder, error)

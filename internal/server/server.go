@@ -105,7 +105,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 
 		videos := api.Group("/videos")
 		{
-			videos.GET("/", s.videosHandler.GetAll)
+			videos.GET("/", s.authMiddleware.Apply(entity.RoleViewer, entity.RoleUser, entity.RoleAdmin), s.videosHandler.GetAll)
 			videos.GET("/:videoId", s.videosHandler.GetVideo)
 			videos.DELETE("/:id", s.videosHandler.DeleteVideo)
 			videos.GET("/:videoId/stream", s.videosHandler.Stream)
@@ -126,7 +126,7 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 
 		folders := api.Group("/folders")
 		{
-			folders.GET("/", s.folderHandler.GetAll)
+			folders.GET("/", s.authMiddleware.Apply(entity.RoleViewer, entity.RoleUser, entity.RoleAdmin), s.folderHandler.GetAll)
 			folders.POST("/", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.CreateRootFolder)
 			folders.GET("/:folderId", s.folderHandler.GetFolder)
 			folders.GET("/root/entries", s.authMiddleware.Apply(entity.RoleUser, entity.RoleAdmin), s.folderHandler.GetRootFolderEntries)

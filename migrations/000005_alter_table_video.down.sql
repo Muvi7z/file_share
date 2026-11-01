@@ -1,0 +1,1 @@
+alter table video DROP COLUMN extension

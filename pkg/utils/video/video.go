@@ -1,6 +1,7 @@
 package video
 
 import (
+	"file_share/internal/entity"
 	"fmt"
 	"math"
 	"mime"
@@ -29,7 +30,7 @@ func VideoContentType(fileName string) string {
 		return "video/x-m4v"
 	case ".webm":
 		return "video/webm"
-	case ".mkv":
+	case entity.MKV:
 		return "video/x-matroska"
 	case ".mov":
 		return "video/quicktime"

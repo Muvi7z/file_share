@@ -1,0 +1,1 @@
+alter table video ADD COLUMN extension text

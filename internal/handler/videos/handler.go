@@ -7,7 +7,7 @@ import (
 )
 
 type VideoService interface {
-	GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit int, offset int) ([]entity.Video, error)
+	GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit int, offset int, enabled *bool) ([]entity.Video, error)
 	GetVideoById(ctx context.Context, id string) (entity.Video, error)
 	Stream(ctx context.Context, videoId string) (entity.VideoStream, error)
 	GetPoster(ctx context.Context, id string) (entity.PosterFile, error)

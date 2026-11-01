@@ -72,8 +72,8 @@ func (s *Service) UpdateFolder(ctx context.Context, update entity.UpdateFolderRe
 	return folder, nil
 }
 
-func (s *Service) GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool) ([]entity.Folder, error) {
-	folders, err := s.folderRepository.GetFolders(ctx, query, rootFolderId, parentFolderId, isRoot, nil)
+func (s *Service) GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot *bool, enabled *bool) ([]entity.Folder, error) {
+	folders, err := s.folderRepository.GetFolders(ctx, query, rootFolderId, parentFolderId, isRoot, enabled)
 	if err != nil {
 		return nil, entity.ErrorGetFolders
 	}

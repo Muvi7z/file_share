@@ -148,7 +148,7 @@ func findPosterTime(
 	return best.Time, nil
 }
 
-func (g *PosterGenerator) GeneratePosterFFmpeg(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error) {
+func (g *PosterGenerator) GeneratePosterFFMPEG(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error) {
 	if err := os.MkdirAll(g.TempDir, 0755); err != nil {
 		return entity.PosterFile{}, err
 	}

@@ -2,6 +2,10 @@ package entity
 
 import "time"
 
+const (
+	MKV = ".mkv"
+)
+
 type Video struct {
 	Id             string    `json:"id"`
 	Title          string    `json:"title"`
@@ -17,6 +21,40 @@ type Video struct {
 	PosterUrl      string    `json:"posterUrl"`
 	StreamUrl      string    `json:"streamUrl"`
 	Path           string    `json:"path"`
+	Extension      string    `json:"extension"`
+}
+
+type AudioTrack struct {
+	Id          string `json:"id"`
+	Title       string `json:"title"`
+	VideoId     string `json:"videoId"`
+	StreamIndex int    `json:"streamIndex"`
+	Language    string `json:"language"`
+	Codec       string `json:"codec"`
+	Channels    int    `json:"channels"`
+	IsDefault   bool   `json:"isDefault"`
+	Status      string `json:"status"`
+}
+
+type AudioTrackInfo struct {
+	AudioTrackStream []AudioTrackStream `json:"streams"`
+}
+
+type AudioTrackStream struct {
+	Index       int                   `json:"index"`
+	CodecName   string                `json:"codec_name"`
+	CodecType   string                `json:"codec_type"`
+	Disposition AudioTrackDisposition `json:"disposition"`
+	Tags        AudioTrackTags        `json:"tags"`
+}
+
+type AudioTrackDisposition struct {
+	Default int `json:"default"`
+}
+
+type AudioTrackTags struct {
+	Language string `json:"language"`
+	Title    string `json:"title"`
 }
 
 type VideoStream struct {

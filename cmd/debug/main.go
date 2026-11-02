@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"file_share/internal/handler/infrastructure/ffmpeg"
+	"file_share/internal/infrastructure/ffmpeg"
 	"fmt"
 	"io"
 	"net/http"

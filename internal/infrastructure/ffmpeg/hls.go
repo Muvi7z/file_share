@@ -1,13 +1,14 @@
 package ffmpeg
 
 import (
+	"file_share/internal/entity"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-func CreateHLS() {
+func (f *FFMPEG) CreateHLS(inputPath string, tracks []entity.AudioTrackStream) {
 	args := []string{
 		"-i", inputPath,
 		"-map", "0:v:0",
@@ -19,7 +20,7 @@ func CreateHLS() {
 
 	for i, track := range tracks {
 		args = append(args,
-			"-map", fmt.Sprintf("0:%d", track.StreamIndex),
+			"-map", fmt.Sprintf("0:%d", track.Disposition.Default),
 		)
 
 		defaultValue := "no"

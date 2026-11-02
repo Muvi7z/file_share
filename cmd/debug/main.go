@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"file_share/internal/entity"
 	"file_share/internal/infrastructure/ffmpeg"
+	"file_share/internal/service/playback"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -103,6 +108,33 @@ func checkVOD(vodID string) (string, error) {
 func main() {
 	fmp := ffmpeg.NewFFMPEG("C:\\Users\\Ochir\\Videos\\temp")
 
-	fmp.GetAudioTrack("C:\\Users\\Ochir\\Videos\\temp\\Obsession.2025.MA.x265.WEB-DL.2160p.SDR.mkv")
+	playbackS := playback.NewService(
+		fmp,
+	)
 
+	ctx := context.Background()
+
+	video := entity.Video{
+		Id:             uuid.New().String(),
+		Title:          "",
+		FolderId:       "",
+		FolderName:     "",
+		ParentFolderId: "",
+		Size:           "",
+		SizeBytes:      0,
+		Duration:       "",
+		ModifiedAt:     time.Time{},
+		Codec:          "",
+		Resolution:     "",
+		PosterUrl:      "",
+		StreamUrl:      "",
+		Path:           "C:\\Users\\Ochir\\Videos\\temp\\Obsession.2025.MA.x265.WEB-DL.2160p.SDR.mkv",
+		Extension:      "",
+	}
+
+	err := playbackS.PrepareHls(ctx, video)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

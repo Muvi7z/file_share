@@ -85,6 +85,13 @@ const (
 	RepostTypeResolved = "resolved"
 )
 
+const (
+	AudioTrackPending    = "pending"
+	AudioTrackProcessing = "processing"
+	AudioTrackReady      = "ready"
+	AudioTrackFailed     = "failed"
+)
+
 type ReportVideo struct {
 	Id             string    `json:"id"`
 	VideoId        string    `json:"videoId"`

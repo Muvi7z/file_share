@@ -22,7 +22,7 @@ func GetHalfTimeVideo(duration int64) string {
 	return FormatDuration(duration / 4)
 }
 
-func VideoContentType(fileName string) string {
+func ContentType(fileName string) string {
 	switch strings.ToLower(filepath.Ext(fileName)) {
 	case ".mp4":
 		return "video/mp4"
@@ -30,6 +30,10 @@ func VideoContentType(fileName string) string {
 		return "video/x-m4v"
 	case ".webm":
 		return "video/webm"
+	case ".ts":
+		return "video/mp2t"
+	case ".m3u8":
+		return "vnd.apple.mpegur"
 	case entity.MKV:
 		return "video/x-matroska"
 	case ".mov":

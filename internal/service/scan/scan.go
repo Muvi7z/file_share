@@ -30,12 +30,17 @@ type repository interface {
 	GetAllFile(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.File, error)
 	CreateFile(ctx context.Context, file entity.File) (entity.File, error)
 	DeleteFile(ctx context.Context, id string) error
+	CreateAudioTracks(ctx context.Context, audioTracks []entity.AudioTrack) ([]entity.AudioTrack, error)
 }
 
 type scanJobRepository interface {
 	CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error)
 	GetScanJob(ctx context.Context, id string) (entity.ScanJob, error)
 	UpdateJob(ctx context.Context, job entity.ScanJob) (entity.ScanJob, error)
+}
+
+type playbackService interface {
+	PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, error)
 }
 
 type posterGenerator interface {
@@ -61,14 +66,16 @@ type Scan struct {
 	repository        repository
 	scanJobRepository scanJobRepository
 	posterGenerator   posterGenerator
+	playbackService   playbackService
 }
 
-func New(logger deps.Logger, repository repository, scanJobRepository scanJobRepository, posterGenerator posterGenerator) *Scan {
+func New(logger deps.Logger, repository repository, scanJobRepository scanJobRepository, posterGenerator posterGenerator, playbackService playbackService) *Scan {
 	return &Scan{
 		logger:            logger,
 		repository:        repository,
 		scanJobRepository: scanJobRepository,
 		posterGenerator:   posterGenerator,
+		playbackService:   playbackService,
 	}
 }
 
@@ -145,6 +152,10 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	foldersEntries := make(map[string]entity.FileBrowserEntry)
 	videosEntries := make(map[string]entity.FileBrowserEntry)
 	fileEntries := make(map[string]entity.FileBrowserEntry)
+
+	//hlsJob := make(map[string]bool)
+
+	hlsChan := make(chan entity.Video, 4)
 
 	folders, err := s.repository.GetFolders(ctx, "", rootFolder.Id, "", nil, nil)
 	if err != nil {
@@ -348,27 +359,40 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 			if strings.EqualFold(localVideo.Extension, entity.MKV) {
 
-			}
+				hlsChan <- localVideo
 
-			file, err := s.posterGenerator.GeneratePosterFFMPEG(ctx, localVideo.Path, localVideo.Id, localVideo.Duration)
+			} else {
+				err = s.CreateVideo(ctx, &localVideo)
+				if err != nil {
+					s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+					continue
+				}
+			}
+		}
+
+	}
+	close(hlsChan)
+
+	for localVideo := range hlsChan {
+		go func() {
+			audioTracks, err := s.playbackService.PrepareHls(ctx, localVideo)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create poster: %v", err))
-				continue
+				s.logger.Error(ctx, fmt.Errorf("failed create hls: %v", err))
+				return
 			}
-			err = file.Reader.Close()
-			if err != nil {
-				return nil, err
-			}
-
-			localVideo.PosterUrl = file.Path
-
-			_, err = s.repository.CreateVideo(ctx, localVideo)
+			err = s.CreateVideo(ctx, &localVideo)
 			if err != nil {
 				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-				return nil, err
+				return
 			}
-			continue
-		}
+
+			_, err = s.repository.CreateAudioTracks(ctx, audioTracks)
+			if err != nil {
+				return
+			}
+
+		}()
+
 	}
 
 	files, err := s.repository.GetAllFile(ctx, "", rootFolder.Id, "", 0, 0)
@@ -383,7 +407,6 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 			if err != nil {
 				s.logger.Error(ctx, fmt.Errorf("failed delete file: %v", err))
 				return nil, err
-
 			}
 			continue
 		}
@@ -407,6 +430,25 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	}
 
 	return browserFileMap, nil
+}
+
+func (s *Scan) CreateVideo(ctx context.Context, video *entity.Video) error {
+	file, err := s.posterGenerator.GeneratePosterFFMPEG(ctx, video.Path, video.Id, video.Duration)
+	if err != nil {
+		return fmt.Errorf("failed create poster: %v", err)
+	}
+	err = file.Reader.Close()
+	if err != nil {
+		return err
+	}
+
+	video.PosterUrl = file.Path
+
+	_, err = s.repository.CreateVideo(ctx, *video)
+	if err != nil {
+		return fmt.Errorf("failed create video: %v", err)
+	}
+	return err
 }
 
 func (s *Scan) ScanFile(_ context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, mime string, path string) (entity.FileBrowserEntry, error) {

@@ -12,12 +12,15 @@ import (
 	report2 "file_share/internal/handler/report"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
+	"file_share/internal/infrastructure/ffmpeg"
 	"file_share/internal/repository"
 	cacheRepo "file_share/internal/repository/cache"
 	"file_share/internal/server"
+	"file_share/internal/service/audioTrack"
 	"file_share/internal/service/auth"
 	"file_share/internal/service/file"
 	"file_share/internal/service/folder"
+	"file_share/internal/service/playback"
 	"file_share/internal/service/report"
 	"file_share/internal/service/scan"
 	"file_share/internal/service/token"
@@ -39,14 +42,16 @@ type Container struct {
 	repository        *repository.Repository
 	sessionRepository *cacheRepo.Repository
 
-	folderService   *folder.Service
-	videoService    *video.Service
-	scanService     *scan.Scan
-	videoFixService *videoFixer.VideoFixer
-	tokenService    *token.Service
-	authService     *auth.Service
-	fileService     *file.Service
-	reportService   *report.Service
+	folderService     *folder.Service
+	videoService      *video.Service
+	scanService       *scan.Scan
+	videoFixService   *videoFixer.VideoFixer
+	tokenService      *token.Service
+	authService       *auth.Service
+	fileService       *file.Service
+	reportService     *report.Service
+	audioTrackService *audioTrack.Service
+	playbackService   *playback.Service
 
 	reportHandler  *report2.Handler
 	folderHandler  *folder2.Handler
@@ -55,6 +60,8 @@ type Container struct {
 	scanHandler    *scan2.Handler
 	authHandler    *auth2.Handler
 	authMiddleware *middleware.Middleware
+
+	mediaProcessor *ffmpeg.FFMPEG
 
 	fileStorage *storage.Storage
 
@@ -214,6 +221,30 @@ func (c *Container) GetFileService() *file.Service {
 	return c.fileService
 }
 
+func (c *Container) GetAudioTrackService() *audioTrack.Service {
+	if c.audioTrackService == nil {
+		c.audioTrackService = audioTrack.NewService(
+			c.GetLogger(),
+			c.GetRepository(),
+		)
+	}
+
+	return c.audioTrackService
+}
+
+func (c *Container) GetPlaybackService() *playback.Service {
+	if c.playbackService == nil {
+		c.playbackService = playback.NewService(
+			c.GetMediaProcessor(),
+			c.GetAudioTrackService(),
+			c.GetVideoService(),
+			c.GetFileStorage(),
+			c.configuration.GetWorkDir(),
+		)
+	}
+	return c.playbackService
+}
+
 func (c *Container) GetScanService() *scan.Scan {
 	if c.scanService == nil {
 		c.scanService = scan.New(
@@ -221,10 +252,20 @@ func (c *Container) GetScanService() *scan.Scan {
 			c.GetRepository(),
 			c.GetRepository(),
 			c.GetPosterGenerator(),
+			c.GetPlaybackService(),
 		)
 	}
 
 	return c.scanService
+}
+
+func (c *Container) GetMediaProcessor() *ffmpeg.FFMPEG {
+	if c.mediaProcessor == nil {
+		c.mediaProcessor = ffmpeg.NewFFMPEG(
+			c.configuration.GetWorkDir(),
+		)
+	}
+	return c.mediaProcessor
 }
 
 func (c *Container) GetVideoFixer() *videoFixer.VideoFixer {
@@ -265,6 +306,8 @@ func (c *Container) GetVideoHandler() *videos.Handler {
 	if c.videoHandler == nil {
 		c.videoHandler = videos.NewHandler(
 			c.GetVideoService(),
+			c.GetPlaybackService(),
+			c.GetAudioTrackService(),
 			c.GetLogger(),
 		)
 	}

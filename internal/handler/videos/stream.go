@@ -22,7 +22,7 @@ func (h *Handler) Stream(c *gin.Context) {
 	}
 	defer stream.Reader.Close()
 
-	contentType := video.VideoContentType(stream.FileName)
+	contentType := video.ContentType(stream.FileName)
 
 	c.Header("Content-Type", contentType)
 	c.Header("Accept-Ranges", "bytes")

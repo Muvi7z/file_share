@@ -22,7 +22,7 @@ type videoRepository interface {
 }
 
 type fileStorage interface {
-	Open(ctx context.Context, path string) (entity.VideoStream, error)
+	Open(ctx context.Context, path string) (entity.FileStream, error)
 	OpenPoster(ctx context.Context, path string) (entity.PosterFile, error)
 	CreatePoster(ctx context.Context, image io.ReadSeeker, path string) error
 }
@@ -143,15 +143,15 @@ func (s *Service) UpdatePoster(ctx context.Context, posterFile entity.PosterFile
 
 }
 
-func (s *Service) Stream(ctx context.Context, videoId string) (entity.VideoStream, error) {
+func (s *Service) Stream(ctx context.Context, videoId string) (entity.FileStream, error) {
 	video, err := s.videoRepository.GetVideoById(ctx, videoId)
 	if err != nil {
-		return entity.VideoStream{}, entity.ErrorGetVideo
+		return entity.FileStream{}, entity.ErrorGetVideo
 	}
 
 	stream, err := s.fileStorage.Open(ctx, video.Path)
 	if err != nil {
-		return entity.VideoStream{}, entity.ErrorGetVideoStream
+		return entity.FileStream{}, entity.ErrorGetVideoStream
 	}
 
 	return stream, nil

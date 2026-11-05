@@ -10,9 +10,11 @@ const (
 )
 
 const (
-	FileTypeFolder = "folder"
-	FileTypeVideo  = "video"
-	FileTypeOther  = "file"
+	FileTypeFolder      = "folder"
+	FileTypeVideo       = "video"
+	FileTypeAudio       = "audio"
+	FileTypePlaylistHLS = "playlist_hls"
+	FileTypeOther       = "file"
 )
 
 type ScanJob struct {

@@ -24,6 +24,7 @@ const (
 	envServerHost = "SERVER_HOST"
 	envServerPort = "SERVER_PORT"
 	envPosterDir  = "POSTER_DIR"
+	envWorkDir    = "WORK_DIR"
 
 	envJWTSecret            = "JWT_SECRET"
 	envDefaultAdminLogin    = "DEFAULT_ADMIN_LOGIN"
@@ -68,6 +69,10 @@ func newFromEnv() (*configuration, error) {
 	c.posterDir, err = getStringFromEnv(envPosterDir)
 	if err != nil {
 		return nil, fmt.Errorf("error getting poster dir: %s", err)
+	}
+	c.workDir, err = getStringFromEnv(envWorkDir)
+	if err != nil {
+		return nil, fmt.Errorf("error getting work dir: %s", err)
 	}
 
 	pc.sslmode = getStringFromEnvOrDefault(envPostgresSslMode, "disable")
@@ -114,6 +119,7 @@ type configuration struct {
 	serverConfiguration   *serverConfiguration
 	redisConfiguration    *redisConfiguration
 	posterDir             string
+	workDir               string
 	jwtSecret             string
 	defaultAdminLogin     string
 	defaultAdminPassword  string
@@ -147,6 +153,10 @@ func (c *configuration) GetPostgresConfiguration() *postgresConfiguration {
 }
 func (c *configuration) GetPosterDir() string {
 	return c.posterDir
+}
+
+func (c *configuration) GetWorkDir() string {
+	return c.workDir
 }
 
 func (pc *postgresConfiguration) GetConnectionString() string {

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"file_share/internal/entity"
 	"fmt"
@@ -13,21 +14,21 @@ import (
 )
 
 type VideoRow struct {
-	Id             string    `db:"id"`
-	Title          string    `db:"title"`
-	FolderId       string    `db:"folder_id"`
-	FolderName     string    `db:"folder_name"`
-	ParentFolderId string    `db:"parent_folder_id"`
-	Size           string    `db:"size"`
-	SizeBytes      int64     `db:"size_bytes"`
-	Duration       string    `db:"duration"`
-	ModifiedAt     time.Time `db:"modified_at"`
-	Codec          string    `db:"codec"`
-	Resolution     string    `db:"resolution"`
-	PosterUrl      string    `db:"poster_url"`
-	StreamUrl      string    `db:"stream_url"`
-	Extension      string    `db:"extension"`
-	Path           string    `db:"path"`
+	Id             string         `db:"id"`
+	Title          string         `db:"title"`
+	FolderId       string         `db:"folder_id"`
+	FolderName     string         `db:"folder_name"`
+	ParentFolderId string         `db:"parent_folder_id"`
+	Size           string         `db:"size"`
+	SizeBytes      int64          `db:"size_bytes"`
+	Duration       string         `db:"duration"`
+	ModifiedAt     time.Time      `db:"modified_at"`
+	Codec          string         `db:"codec"`
+	Resolution     string         `db:"resolution"`
+	PosterUrl      string         `db:"poster_url"`
+	StreamUrl      string         `db:"stream_url"`
+	Extension      sql.NullString `db:"extension"`
+	Path           string         `db:"path"`
 }
 
 const videosTable = "video"
@@ -95,7 +96,7 @@ func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, paren
 			PosterUrl:      row.PosterUrl,
 			StreamUrl:      row.StreamUrl,
 			Path:           row.Path,
-			Extension:      row.Extension,
+			Extension:      row.Extension.String,
 		})
 	}
 
@@ -194,7 +195,7 @@ func (r *Repository) updateVideoTx(ctx context.Context, video entity.Video, id s
 		Resolution:     row.Resolution,
 		PosterUrl:      row.PosterUrl,
 		StreamUrl:      row.StreamUrl,
-		Extension:      row.Extension,
+		Extension:      row.Extension.String,
 		Path:           row.Path,
 	}, nil
 }
@@ -347,7 +348,7 @@ func (r *Repository) createVideoTx(ctx context.Context, video entity.Video, tx *
 		StreamUrl:      row.StreamUrl,
 		Path:           row.Path,
 		ModifiedAt:     row.ModifiedAt,
-		Extension:      row.Extension,
+		Extension:      row.Extension.String,
 	}
 
 	return result, nil
@@ -390,6 +391,6 @@ func (r *Repository) GetVideoById(ctx context.Context, id string) (entity.Video,
 		PosterUrl:      row.PosterUrl,
 		StreamUrl:      row.StreamUrl,
 		Path:           row.Path,
-		Extension:      row.Extension,
+		Extension:      row.Extension.String,
 	}, nil
 }

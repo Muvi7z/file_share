@@ -2,7 +2,9 @@ package playback
 
 import (
 	"context"
+	"errors"
 	"file_share/internal/entity"
+	"path/filepath"
 
 	"github.com/google/uuid"
 )
@@ -12,23 +14,90 @@ type mediaProcessor interface {
 	GetAudioTrack(inputPath string) ([]entity.AudioTrackStream, error)
 }
 
-type videoRepository interface {
+type videoService interface {
+	GetVideoById(ctx context.Context, id string) (entity.Video, error)
+}
+
+type audioService interface {
+	CreateAudioTracks(ctx context.Context, audioTracks []entity.AudioTrack) ([]entity.AudioTrack, error)
+	UpdateAudioTrack(ctx context.Context, audioTrack entity.AudioTrack, id string) (entity.AudioTrack, error)
+	GetAudioTrackById(ctx context.Context, id string) (entity.AudioTrack, error)
+}
+
+type fileStorage interface {
+	Open(ctx context.Context, path string) (entity.FileStream, error)
 }
 
 type Service struct {
 	mediaProcessor mediaProcessor
+	audioService   audioService
+	videoService   videoService
+	fileStorage    fileStorage
+	WorkDir        string
 }
 
-func NewService(mediaProcessor mediaProcessor) *Service {
-	return &Service{mediaProcessor: mediaProcessor}
+func NewService(mediaProcessor mediaProcessor, audioService audioService, videoService videoService, fileStorage fileStorage, workDir string) *Service {
+	return &Service{
+		mediaProcessor: mediaProcessor,
+		audioService:   audioService,
+		videoService:   videoService,
+		fileStorage:    fileStorage,
+		WorkDir:        workDir,
+	}
 }
 
-func (s *Service) PrepareHls(ctx context.Context, video entity.Video) error {
+func (s *Service) StreamHLS(ctx context.Context, fileName, id, typeFile string) (entity.FileStream, error) {
+	switch typeFile {
+	case entity.FileTypeVideo:
+		video, err := s.videoService.GetVideoById(ctx, id)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideo
+		}
+
+		path := filepath.Join(s.WorkDir, video.Id, "video", fileName)
+
+		stream, err := s.fileStorage.Open(ctx, path)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideoStream
+		}
+		return stream, nil
+	case entity.FileTypeAudio:
+		audio, err := s.audioService.GetAudioTrackById(ctx, id)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideo
+		}
+
+		path := filepath.Join(s.WorkDir, audio.VideoId, audio.Id, fileName)
+
+		stream, err := s.fileStorage.Open(ctx, path)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideoStream
+		}
+		return stream, nil
+	case entity.FileTypePlaylistHLS:
+		video, err := s.videoService.GetVideoById(ctx, id)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideo
+		}
+
+		path := filepath.Join(s.WorkDir, video.Id, fileName)
+
+		stream, err := s.fileStorage.Open(ctx, path)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideoStream
+		}
+		return stream, nil
+	}
+
+	return entity.FileStream{}, errors.New("invalid file type")
+}
+
+func (s *Service) PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, error) {
 	//получить инфу о потоках аудио
 
 	trackStreams, err := s.mediaProcessor.GetAudioTrack(video.Path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var audioTracks []entity.AudioTrack
@@ -57,13 +126,25 @@ func (s *Service) PrepareHls(ctx context.Context, video entity.Video) error {
 
 	}
 
+	//разделить и подготовить потоки аудио и видео
+	//_, err = s.audioService.CreateAudioTracks(ctx, audioTracks)
+	//if err != nil {
+	//	return err
+	//}
+
 	err = s.mediaProcessor.CreateHLS(ctx, video, audioTracks)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	//разделить подготовить потоки аудио и видео
-	//сохранить аудиодорожки в бд
+	//изменить аудиодорожки в бд
+	//for _, audioTrack := range audioTracks {
+	//	audioTrack.Status = entity.AudioTrackReady
+	//	_, err = s.audioService.UpdateAudioTrack(ctx, audioTrack, video.Id)
+	//	if err != nil {
+	//		return err
+	//	}
+	//}
 
-	return nil
+	return audioTracks, nil
 }

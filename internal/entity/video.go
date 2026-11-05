@@ -57,7 +57,7 @@ type AudioTrackTags struct {
 	Title    string `json:"title"`
 }
 
-type VideoStream struct {
+type FileStream struct {
 	FileName string
 	Size     int64
 	ModTime  time.Time

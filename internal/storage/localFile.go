@@ -8,26 +8,26 @@ import (
 	"path/filepath"
 )
 
-func (s *Storage) Open(ctx context.Context, path string) (entity.VideoStream, error) {
+func (s *Storage) Open(ctx context.Context, path string) (entity.FileStream, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return entity.VideoStream{}, err
+		return entity.FileStream{}, err
 	}
 
 	stat, err := file.Stat()
 	if err != nil {
 		if err = file.Close(); err != nil {
 		}
-		return entity.VideoStream{}, err
+		return entity.FileStream{}, err
 	}
 
 	if stat.IsDir() {
 		if err = file.Close(); err != nil {
 		}
-		return entity.VideoStream{}, os.ErrNotExist
+		return entity.FileStream{}, os.ErrNotExist
 	}
 
-	return entity.VideoStream{
+	return entity.FileStream{
 		FileName: stat.Name(),
 		Size:     stat.Size(),
 		ModTime:  stat.ModTime(),

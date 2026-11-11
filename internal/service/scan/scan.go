@@ -7,6 +7,7 @@ import (
 	"file_share/internal/entity"
 	video2 "file_share/pkg/utils/video"
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"io/fs"
 	"path/filepath"
 	"strconv"
@@ -47,6 +48,12 @@ type posterGenerator interface {
 	GeneratePosterFFMPEG(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
 }
 
+type fsWatcher interface {
+	Add(ctx context.Context, path string) error
+	Remove(ctx context.Context, path string) error
+	GetEventsChannel() <-chan fsnotify.Event
+}
+
 var allowedVideoExtension = map[string]bool{
 	".mp4":     true,
 	".avi":     true,
@@ -67,15 +74,24 @@ type Scan struct {
 	scanJobRepository scanJobRepository
 	posterGenerator   posterGenerator
 	playbackService   playbackService
+	fsWatcher         fsWatcher
 }
 
-func New(logger deps.Logger, repository repository, scanJobRepository scanJobRepository, posterGenerator posterGenerator, playbackService playbackService) *Scan {
+func New(
+	logger deps.Logger,
+	repository repository,
+	scanJobRepository scanJobRepository,
+	posterGenerator posterGenerator,
+	playbackService playbackService,
+	fsWatcher fsWatcher,
+) *Scan {
 	return &Scan{
 		logger:            logger,
 		repository:        repository,
 		scanJobRepository: scanJobRepository,
 		posterGenerator:   posterGenerator,
 		playbackService:   playbackService,
+		fsWatcher:         fsWatcher,
 	}
 }
 
@@ -98,6 +114,27 @@ func (s *Scan) CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.Sc
 	}
 
 	return scan, nil
+}
+
+func (s *Scan) StartAutoScan(ctx context.Context) error {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				s.logger.Info(ctx, "Stop AutoScan process")
+				return
+			case event, ok := <-s.fsWatcher.GetEventsChannel():
+				if !ok {
+					s.logger.Info(ctx, "Stop AutoScan process")
+				}
+
+				s.logger.Info(ctx, "event", event)
+
+			}
+		}
+	}()
+
+	return nil
 }
 
 func (s *Scan) StartProcessScan(ctx context.Context, handlePeriod time.Duration) {

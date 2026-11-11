@@ -13,6 +13,7 @@ import (
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
 	"file_share/internal/infrastructure/ffmpeg"
+	fsnotify2 "file_share/internal/infrastructure/fsnotify"
 	"file_share/internal/repository"
 	cacheRepo "file_share/internal/repository/cache"
 	"file_share/internal/server"
@@ -30,6 +31,8 @@ import (
 	"file_share/migrations"
 	"file_share/pkg/logger"
 	"fmt"
+	"github.com/fsnotify/fsnotify"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/jmoiron/sqlx"
@@ -62,8 +65,9 @@ type Container struct {
 	authMiddleware *middleware.Middleware
 
 	mediaProcessor *ffmpeg.FFMPEG
-
-	fileStorage *storage.Storage
+	fsWatcher      *fsnotify.Watcher
+	fsNotify       *fsnotify2.FSNotify
+	fileStorage    *storage.Storage
 
 	posterGenerator *generator.PosterGenerator
 
@@ -93,13 +97,35 @@ func Init() (*Container, func(), error) {
 	c.ctx = context.Background()
 	c.logger = logger.New()
 
+	c.fsWatcher, err = fsnotify.NewWatcher()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error to initialize file system watcher: %w", err)
+	}
+
 	c.db, err = NewSqlxConn(c.configuration.GetPostgresConfiguration())
 	if err != nil {
 		return nil, nil, fmt.Errorf("error to connect to database: %w", err)
 	}
 
 	c.tempDir = c.configuration.GetPosterDir()
+
+	err = c.fsWatcher.Add("C:\\Users\\Ochir.zha\\Downloads\\Telegram Desktop")
+	if err != nil {
+		return nil, nil, fmt.Errorf("error to initialize file system watcher: %w", err)
+	}
+
+	scanDuration := time.Second * 5
+	c.scanService.StartProcessScan(c.ctx, scanDuration)
+
+	err = c.scanService.StartAutoScan(c.ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error to start auto-scan: %w", err)
+	}
+
 	closer := func() {
+		if err = c.fsWatcher.Close(); err != nil {
+			c.logger.Error(c.ctx, fmt.Errorf("failed to close fsnotify: %w", err))
+		}
 		if err = c.db.Close(); err != nil {
 			c.logger.Error(c.ctx, fmt.Errorf("failed to close database: %w", err))
 		}
@@ -253,6 +279,7 @@ func (c *Container) GetScanService() *scan.Scan {
 			c.GetRepository(),
 			c.GetPosterGenerator(),
 			c.GetPlaybackService(),
+			c.GetFSNotify(),
 		)
 	}
 
@@ -266,6 +293,16 @@ func (c *Container) GetMediaProcessor() *ffmpeg.FFMPEG {
 		)
 	}
 	return c.mediaProcessor
+}
+
+func (c *Container) GetFSNotify() *fsnotify2.FSNotify {
+	if c.fsNotify == nil {
+		c.fsNotify = fsnotify2.New(
+			c.fsWatcher,
+		)
+	}
+
+	return c.fsNotify
 }
 
 func (c *Container) GetVideoFixer() *videoFixer.VideoFixer {

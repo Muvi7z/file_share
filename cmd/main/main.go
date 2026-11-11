@@ -53,11 +53,6 @@ func main() {
 
 	log.Info(ctx, "successful default admin seed")
 
-	scanService := container.GetScanService()
-	scanDuration := time.Second * 5
-
-	scanService.StartProcessScan(ctx, scanDuration)
-
 	videoFixer := container.GetVideoFixer()
 	videoFixerDuration := time.Second * 5
 	videoFixer.StartProcessFix(ctx, videoFixerDuration)

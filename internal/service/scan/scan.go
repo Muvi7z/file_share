@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ type scanJobRepository interface {
 }
 
 type playbackService interface {
-	PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, error)
+	PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, func() error, error)
 }
 
 type posterGenerator interface {
@@ -53,6 +54,18 @@ type fsWatcher interface {
 	Remove(ctx context.Context, path string) error
 	GetEventsChannel() <-chan fsnotify.Event
 }
+
+type watchFile struct {
+	Status string
+	Name   string
+	Path   string
+	Size   int64
+}
+
+const (
+	StatusWatchWriting   = "writing"
+	StatusWatchCompleted = "completed"
+)
 
 var allowedVideoExtension = map[string]bool{
 	".mp4":     true,
@@ -116,19 +129,215 @@ func (s *Scan) CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.Sc
 	return scan, nil
 }
 
+func (s *Scan) CreateHLSVideo(ctx context.Context, hlsChan chan entity.Video) error {
+	for localVideo := range hlsChan {
+		go func() {
+			s.logger.Info(ctx, "start create hls video")
+
+			audioTracks, cleanup, err := s.playbackService.PrepareHls(ctx, localVideo)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create hls: %v", err))
+				return
+			}
+
+			saved := false
+
+			defer func() {
+				if !saved {
+					err = cleanup()
+					if err != nil {
+						s.logger.Error(ctx, fmt.Errorf("failed delete hls video: %v", err))
+						return
+					}
+				}
+			}()
+
+			err = s.CreateVideo(ctx, &localVideo)
+			if err != nil {
+
+				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+				return
+			}
+
+			_, err = s.repository.CreateAudioTracks(ctx, audioTracks)
+			if err != nil {
+				s.logger.Error(ctx, fmt.Errorf("failed create audio tracks: %v", err))
+				return
+			}
+			saved = true
+		}()
+	}
+
+	return nil
+}
+
 func (s *Scan) StartAutoScan(ctx context.Context) error {
+
+	// добавить просмотр этих папок
+
+	//
+
 	go func() {
+		mapFiles := make(map[string]watchFile)
+		mapFolders := make(map[string]entity.Folder)
+		hlsChan := make(chan entity.Video, 4)
+
+		defer close(hlsChan)
+
+		go func() {
+			err := s.CreateHLSVideo(ctx, hlsChan)
+			if err != nil {
+				s.logger.Info(ctx, "error to get root folders")
+				return
+			}
+
+		}()
+
+		isRoot := true
+		rootFolders, err := s.repository.GetFolders(ctx, "", "", "", &isRoot, nil)
+		if err != nil {
+			s.logger.Info(ctx, "error to get root folders")
+			return
+		}
+
+		for _, rootFolder := range rootFolders {
+			folders, err := s.repository.GetFolders(ctx, "", rootFolder.Id, "", nil, nil)
+			if err != nil {
+				s.logger.Info(ctx, "error to get root folders")
+				continue
+			}
+
+			for _, folder := range folders {
+				err := s.fsWatcher.Add(ctx, folder.Path)
+				if err != nil {
+					s.logger.Info(ctx, "error to watch folders")
+					continue
+				}
+
+				mapFolders[folder.Path] = folder
+
+			}
+
+			err = s.fsWatcher.Add(ctx, rootFolder.Path)
+			if err != nil {
+				s.logger.Info(ctx, "error to watch folders")
+				continue
+			}
+
+			mapFolders[rootFolder.Path] = rootFolder
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
 				s.logger.Info(ctx, "Stop AutoScan process")
 				return
 			case event, ok := <-s.fsWatcher.GetEventsChannel():
+
 				if !ok {
 					s.logger.Info(ctx, "Stop AutoScan process")
+					return
 				}
 
-				s.logger.Info(ctx, "event", event)
+				switch event.Op {
+				case fsnotify.Write:
+					fileWatch, okFile := mapFiles[event.Name]
+					if !okFile {
+						s.logger.Error(ctx, errors.New("error to read map files"), event.Name)
+						continue
+					}
+					time.Sleep(time.Second * 1)
+					if fileWatch.Status == StatusWatchWriting {
+						file, err := os.Open(event.Name)
+						if err != nil {
+							s.logger.Info(ctx, "error to open file FileWatchWriting", event.Name, event)
+							continue
+						}
+						s.logger.Info(ctx, "open file FileWatchWriting", event.Name, event)
+
+						info, err := file.Stat()
+						if err != nil {
+							s.logger.Info(ctx, "error to stat file", event.Name)
+							continue
+						}
+
+						folderPath := filepath.Dir(event.Name)
+						fileName := filepath.Base(event.Name) // "my_video.mp4"
+						ext := filepath.Ext(fileName)
+						parentFolder := mapFolders[folderPath]
+
+						if allowedVideoExtension[ext] {
+							entityVideo, err := s.ScanVideo(ctx, info, event.Name)
+							if err != nil {
+								s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+								continue
+							}
+							entityVideo.Video.ParentFolderId = parentFolder.Id
+							entityVideo.Video.FolderName = parentFolder.Name
+							entityVideo.Video.FolderId = parentFolder.RootFolderId
+							if strings.EqualFold(ext, entity.MKV) {
+								hlsChan <- *entityVideo.Video
+
+							} else {
+								err = s.CreateVideo(ctx, entityVideo.Video)
+								if err != nil {
+									s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+									continue
+								}
+							}
+						} else {
+							entityFile, err := s.ScanFile(ctx, info, "", event.Name)
+							if err != nil {
+								s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+								continue
+							}
+							entityFile.File.ParentFolderId = parentFolder.Id
+							entityFile.File.FolderName = parentFolder.Name
+							entityFile.File.FolderId = parentFolder.RootFolderId
+
+							_, err = s.repository.CreateFile(ctx, *entityFile.File)
+							if err != nil {
+								s.logger.Error(ctx, fmt.Errorf("failed create file: %v", err))
+								continue
+							}
+						}
+
+						err = file.Close()
+						if err != nil {
+							return
+						}
+					}
+
+				case fsnotify.Create:
+					fileWatch, okFile := mapFiles[event.Name]
+
+					_ = fileWatch
+					if !okFile {
+
+						file, err := os.Open(event.Name)
+						if err != nil {
+							mapFiles[event.Name] = watchFile{
+								Status: StatusWatchWriting,
+								Path:   event.Name,
+							}
+
+							s.logger.Info(ctx, "error to open file FileWatchCreate", event.Name)
+							continue
+						}
+						s.logger.Info(ctx, "event", event)
+						err = file.Close()
+						if err != nil {
+							s.logger.Error(ctx, errors.New("error to close file"))
+
+							return
+						}
+					}
+
+				default:
+					s.logger.Info(ctx, "event unhandled default case")
+				}
+				//если файл большой, то при копировании он помечается create
+				// нужно отслеживать его путь и смотреть после получения инвента write, размер файла, если он изменился значит файл все еще копируется
 
 			}
 		}
@@ -269,48 +478,51 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 			// 2. Получаем расширение
 			ext := filepath.Ext(fileName) // ".mp4"
-			ok := allowedVideoExtension[ext]
+			parentPath := filepath.Dir(path)
+
+			folderEntry, ok := browserFileMap[parentPath]
 			if ok {
-				parentPath := filepath.Dir(path)
+				folderEntry.Folder.VideosCount++
 
-				folderEntry, ok := browserFileMap[parentPath]
-				if ok {
-					folderEntry.Folder.VideosCount++
+				browserFileMap[parentPath] = folderEntry
+			}
 
-					browserFileMap[parentPath] = folderEntry
-				}
+			if allowedVideoExtension[ext] {
+				info, _ := d.Info()
 
-				entityVideo, err := s.ScanVideo(ctx, d, rootFolder.Id, folderEntry, path)
+				entityVideo, err := s.ScanVideo(ctx, info, path)
 				if err != nil {
 					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
 					return nil
 				}
 
+				entityVideo.Video.ParentFolderId = folderEntry.Folder.Id
+				entityVideo.Video.FolderName = folderEntry.Folder.Name
+				entityVideo.Video.FolderId = rootFolder.Id
+
 				localVideos = append(localVideos, *entityVideo.Video)
 				browserFileMap[path] = entityVideo
 
-				return nil
+			} else {
+				info, err := d.Info()
+				if err != nil {
+					s.logger.Error(ctx, fmt.Errorf("failed get info: %v", err))
+					return nil
+				}
+				entityFile, err := s.ScanFile(ctx, info, "", path)
+				if err != nil {
+					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+					return nil
+				}
+
+				entityFile.File.FolderId = rootFolder.Id
+				entityFile.File.ParentFolderId = folderEntry.Folder.Id
+
+				localFiles = append(localFiles, *entityFile.File)
+				browserFileMap[path] = entityFile
 			}
-			//mime, ok := entity.AllowedImageExts[ext]
-			parentPath := filepath.Dir(path)
 
-			folderEntry, ok := browserFileMap[parentPath]
-			if ok {
-				folderEntry.Folder.FilesCount++
-
-				browserFileMap[parentPath] = folderEntry
-			}
-
-			entityFile, err := s.ScanFile(ctx, d, rootFolder.Id, folderEntry, "", path)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
-				return nil
-			}
-
-			localFiles = append(localFiles, *entityFile.File)
-			browserFileMap[path] = entityFile
 			return nil
-
 		}
 
 		return nil // Продолжаем обход
@@ -410,26 +622,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	}
 	close(hlsChan)
 
-	for localVideo := range hlsChan {
-		go func() {
-			audioTracks, err := s.playbackService.PrepareHls(ctx, localVideo)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create hls: %v", err))
-				return
-			}
-			err = s.CreateVideo(ctx, &localVideo)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-				return
-			}
-
-			_, err = s.repository.CreateAudioTracks(ctx, audioTracks)
-			if err != nil {
-				return
-			}
-
-		}()
-
+	err = s.CreateHLSVideo(ctx, hlsChan)
+	if err != nil {
+		return nil, err
 	}
 
 	files, err := s.repository.GetAllFile(ctx, "", rootFolder.Id, "", 0, 0)
@@ -488,24 +683,20 @@ func (s *Scan) CreateVideo(ctx context.Context, video *entity.Video) error {
 	return err
 }
 
-func (s *Scan) ScanFile(_ context.Context, fileEntry fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, mime string, path string) (entity.FileBrowserEntry, error) {
-	info, _ := fileEntry.Info()
-	// 3. Обрезаем расширение
+func (s *Scan) ScanFile(_ context.Context, info fs.FileInfo, mime string, path string) (entity.FileBrowserEntry, error) {
 	fileName := filepath.Base(path)
 	ext := filepath.Ext(fileName) // ".mp4"
 	nameWithoutExt := strings.TrimSuffix(fileName, ext)
 
 	file := entity.File{
-		Id:             uuid.New().String(),
-		Name:           nameWithoutExt,
-		Path:           path,
-		Extension:      ext,
-		FolderId:       rootFolderId,
-		ParentFolderId: folderEntry.Folder.Id,
-		Size:           video2.FormatFileSize(info.Size()),
-		SizeBytes:      info.Size(),
-		ModifiedAt:     info.ModTime(),
-		MimeType:       mime,
+		Id:         uuid.New().String(),
+		Name:       nameWithoutExt,
+		Path:       path,
+		Extension:  ext,
+		Size:       video2.FormatFileSize(info.Size()),
+		SizeBytes:  info.Size(),
+		ModifiedAt: info.ModTime(),
+		MimeType:   mime,
 	}
 
 	return entity.FileBrowserEntry{
@@ -515,8 +706,7 @@ func (s *Scan) ScanFile(_ context.Context, fileEntry fs.DirEntry, rootFolderId s
 
 }
 
-func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderId string, folderEntry entity.FileBrowserEntry, path string) (entity.FileBrowserEntry, error) {
-	info, _ := videoFile.Info()
+func (s *Scan) ScanVideo(ctx context.Context, info os.FileInfo, path string) (entity.FileBrowserEntry, error) {
 	fileName := filepath.Base(path)
 	ext := filepath.Ext(fileName) // ".mp4"
 	if !allowedVideoExtension[ext] {
@@ -545,10 +735,6 @@ func (s *Scan) ScanVideo(ctx context.Context, videoFile fs.DirEntry, rootFolderI
 		Size:       data.Format.Size,
 		Extension:  ext,
 	}
-
-	video.ParentFolderId = folderEntry.Folder.Id
-	video.FolderName = folderEntry.Folder.Name
-	video.FolderId = rootFolderId
 
 	for _, stream := range data.Streams {
 		switch stream.CodecType {

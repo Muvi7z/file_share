@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"file_share/internal/entity"
+	"os"
 	"path/filepath"
 
 	"github.com/google/uuid"
@@ -92,12 +93,12 @@ func (s *Service) StreamHLS(ctx context.Context, fileName, id, typeFile string) 
 	return entity.FileStream{}, errors.New("invalid file type")
 }
 
-func (s *Service) PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, error) {
+func (s *Service) PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, func() error, error) {
 	//получить инфу о потоках аудио
 
 	trackStreams, err := s.mediaProcessor.GetAudioTrack(video.Path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var audioTracks []entity.AudioTrack
@@ -134,7 +135,11 @@ func (s *Service) PrepareHls(ctx context.Context, video entity.Video) ([]entity.
 
 	err = s.mediaProcessor.CreateHLS(ctx, video, audioTracks)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	cleanup := func() error {
+		return os.RemoveAll(filepath.Join(s.WorkDir, video.Id))
 	}
 
 	//изменить аудиодорожки в бд
@@ -146,5 +151,5 @@ func (s *Service) PrepareHls(ctx context.Context, video entity.Video) ([]entity.
 	//	}
 	//}
 
-	return audioTracks, nil
+	return audioTracks, cleanup, nil
 }

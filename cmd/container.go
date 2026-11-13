@@ -109,15 +109,12 @@ func Init() (*Container, func(), error) {
 
 	c.tempDir = c.configuration.GetPosterDir()
 
-	err = c.fsWatcher.Add("C:\\Users\\Ochir.zha\\Downloads\\Telegram Desktop")
-	if err != nil {
-		return nil, nil, fmt.Errorf("error to initialize file system watcher: %w", err)
-	}
-
 	scanDuration := time.Second * 5
-	c.scanService.StartProcessScan(c.ctx, scanDuration)
 
-	err = c.scanService.StartAutoScan(c.ctx)
+	scanService := c.GetScanService()
+	scanService.StartProcessScan(c.ctx, scanDuration)
+
+	err = scanService.StartAutoScan(c.ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error to start auto-scan: %w", err)
 	}

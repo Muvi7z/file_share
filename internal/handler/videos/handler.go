@@ -13,6 +13,7 @@ type VideoService interface {
 	GetPoster(ctx context.Context, id string) (entity.PosterFile, error)
 	UpdatePoster(ctx context.Context, posterFile entity.PosterFile) (string, error)
 	DeleteVideo(ctx context.Context, id string) error
+	StreamHLS(ctx context.Context, fileName, id, typeFile string) (entity.FileStream, error)
 }
 
 type audioTrackService interface {
@@ -20,7 +21,6 @@ type audioTrackService interface {
 }
 
 type PlaybackService interface {
-	StreamHLS(ctx context.Context, fileName, id, typeFile string) (entity.FileStream, error)
 }
 
 type Handler struct {

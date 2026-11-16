@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type videoRepository interface {
@@ -31,20 +32,41 @@ type posterGenerator interface {
 	GeneratePosterFFMPEG(ctx context.Context, videoPath, videoId, duration string) (entity.PosterFile, error)
 }
 
+type audioService interface {
+	GetAudioTrackById(ctx context.Context, id string) (entity.AudioTrack, error)
+}
+
+type playbackService interface {
+	DeleteHLS(_ context.Context, id string) error
+	StreamHLS(ctx context.Context, fileName string, file entity.FileBrowserEntry) (entity.FileStream, error)
+}
+
 type Service struct {
 	logger          deps.Logger
 	videoRepository videoRepository
 	fileStorage     fileStorage
 	posterGenerator posterGenerator
+	playbackService playbackService
+	audioService    audioService
 	PosterDir       string
 }
 
-func NewService(videoRepository videoRepository, fileStorage fileStorage, posterGenerator posterGenerator, logger deps.Logger, PosterDir string) *Service {
+func NewService(
+	videoRepository videoRepository,
+	fileStorage fileStorage,
+	posterGenerator posterGenerator,
+	logger deps.Logger,
+	PosterDir string,
+	playbackService playbackService,
+	audioService audioService,
+) *Service {
 	return &Service{
 		logger:          logger,
 		videoRepository: videoRepository,
 		fileStorage:     fileStorage,
 		posterGenerator: posterGenerator,
+		playbackService: playbackService,
+		audioService:    audioService,
 		PosterDir:       PosterDir,
 	}
 }
@@ -66,6 +88,14 @@ func (s *Service) DeleteVideo(ctx context.Context, id string) error {
 			return entity.ErrorDeletePoster
 		}
 
+	}
+
+	if strings.EqualFold(video.Extension, entity.MKV) {
+		err := s.playbackService.DeleteHLS(ctx, id)
+		if err != nil {
+			s.logger.Error(ctx, err)
+			return entity.ErrorDeleteHLS
+		}
 	}
 
 	err = s.videoRepository.DeleteVideo(ctx, id)
@@ -156,6 +186,64 @@ func (s *Service) Stream(ctx context.Context, videoId string) (entity.FileStream
 
 	return stream, nil
 
+}
+
+func (s *Service) StreamHLS(ctx context.Context, fileName, id string, typeFile string) (entity.FileStream, error) {
+	switch typeFile {
+	case entity.FileTypeVideo:
+		video, err := s.videoRepository.GetVideoById(ctx, id)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideo
+		}
+
+		file := entity.FileBrowserEntry{
+			Type:  entity.FileTypeVideo,
+			Video: &video,
+		}
+
+		hls, err := s.playbackService.StreamHLS(ctx, fileName, file)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetHLS
+		}
+
+		return hls, nil
+	case entity.FileTypeAudio:
+		audio, err := s.audioService.GetAudioTrackById(ctx, id)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideo
+		}
+
+		file := entity.FileBrowserEntry{
+			Type:  entity.FileTypeAudio,
+			Audio: &audio,
+		}
+
+		hls, err := s.playbackService.StreamHLS(ctx, fileName, file)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetHLS
+		}
+
+		return hls, nil
+	case entity.FileTypePlaylistHLS:
+		video, err := s.videoRepository.GetVideoById(ctx, id)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetVideo
+		}
+
+		file := entity.FileBrowserEntry{
+			Type:  entity.FileTypePlaylistHLS,
+			Video: &video,
+		}
+
+		hls, err := s.playbackService.StreamHLS(ctx, fileName, file)
+		if err != nil {
+			return entity.FileStream{}, entity.ErrorGetHLS
+		}
+
+		return hls, nil
+	}
+
+	return entity.FileStream{}, errors.New("invalid file type")
 }
 
 func (s *Service) GetAll(ctx context.Context, query, rootFolderId, parentFolderId string, limit int, offset int, enabled *bool) ([]entity.Video, error) {

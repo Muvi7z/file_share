@@ -30,6 +30,9 @@ var (
 	ErrorCreatePoster   = errors.New("error create poster")
 	ErrorDeletePoster   = errors.New("error delete poster")
 
+	ErrorGetHLS    = errors.New("error get hls")
+	ErrorDeleteHLS = errors.New("error delete hls")
+
 	ErrorNotFoundAudioTrack = errors.New("audio track not found")
 	ErrorCreateAudioTrack   = errors.New("error create audio track")
 	ErrorGetAudioTrack      = errors.New("error get audio track")

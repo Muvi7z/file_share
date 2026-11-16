@@ -18,7 +18,7 @@ func (h *Handler) GetHLSVideo(c *gin.Context) {
 		typeFile = entity.FileTypePlaylistHLS
 	}
 
-	stream, err := h.playbackService.StreamHLS(ctx, fileName, videoId, typeFile)
+	stream, err := h.videoService.StreamHLS(ctx, fileName, videoId, typeFile)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, entity.ErrorResponse{
 			Message: err.Error(),

@@ -7,14 +7,15 @@ import (
 	"file_share/internal/entity"
 	video2 "file_share/pkg/utils/video"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/vansante/go-ffprobe"
 )
@@ -43,6 +44,7 @@ type scanJobRepository interface {
 
 type playbackService interface {
 	PrepareHls(ctx context.Context, video entity.Video) ([]entity.AudioTrack, func() error, error)
+	DeleteHLS(_ context.Context, id string) error
 }
 
 type posterGenerator interface {
@@ -129,50 +131,8 @@ func (s *Scan) CreateScanJob(ctx context.Context, job entity.ScanJob) (entity.Sc
 	return scan, nil
 }
 
-func (s *Scan) CreateHLSVideo(ctx context.Context, hlsChan chan entity.Video) error {
-	for localVideo := range hlsChan {
-		go func() {
-			s.logger.Info(ctx, "start create hls video")
-
-			audioTracks, cleanup, err := s.playbackService.PrepareHls(ctx, localVideo)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create hls: %v", err))
-				return
-			}
-
-			saved := false
-
-			defer func() {
-				if !saved {
-					err = cleanup()
-					if err != nil {
-						s.logger.Error(ctx, fmt.Errorf("failed delete hls video: %v", err))
-						return
-					}
-				}
-			}()
-
-			err = s.CreateVideo(ctx, &localVideo)
-			if err != nil {
-
-				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
-				return
-			}
-
-			_, err = s.repository.CreateAudioTracks(ctx, audioTracks)
-			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create audio tracks: %v", err))
-				return
-			}
-			saved = true
-		}()
-	}
-
-	return nil
-}
-
 func (s *Scan) StartAutoScan(ctx context.Context) error {
-
+	workers := 4
 	// добавить просмотр этих папок
 
 	//
@@ -185,12 +145,16 @@ func (s *Scan) StartAutoScan(ctx context.Context) error {
 		defer close(hlsChan)
 
 		go func() {
-			err := s.CreateHLSVideo(ctx, hlsChan)
-			if err != nil {
-				s.logger.Info(ctx, "error to get root folders")
-				return
-			}
+			channels := s.fanOutHLS(ctx, hlsChan, workers)
 
+			result := s.fanInHLS(ctx, channels...)
+
+			for err := range result {
+				if err != nil {
+					s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+					return
+				}
+			}
 		}()
 
 		isRoot := true
@@ -275,6 +239,10 @@ func (s *Scan) StartAutoScan(ctx context.Context) error {
 							entityVideo.Video.ParentFolderId = parentFolder.Id
 							entityVideo.Video.FolderName = parentFolder.Name
 							entityVideo.Video.FolderId = parentFolder.RootFolderId
+
+							fileWatch.Status = StatusWatchCompleted
+
+							mapFiles[event.Name] = fileWatch
 							if strings.EqualFold(ext, entity.MKV) {
 								hlsChan <- *entityVideo.Video
 
@@ -398,12 +366,12 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	foldersEntries := make(map[string]entity.FileBrowserEntry)
 	videosEntries := make(map[string]entity.FileBrowserEntry)
 	fileEntries := make(map[string]entity.FileBrowserEntry)
+	ctxScan, cancel := context.WithCancel(ctx)
+	workers := 4
 
-	//hlsJob := make(map[string]bool)
+	defer cancel()
 
-	hlsChan := make(chan entity.Video, 4)
-
-	folders, err := s.repository.GetFolders(ctx, "", rootFolder.Id, "", nil, nil)
+	folders, err := s.repository.GetFolders(ctxScan, "", rootFolder.Id, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +387,7 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 	err = filepath.WalkDir(rootFolder.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			s.logger.Error(ctx, fmt.Errorf("failed walk dir: %v", err))
+			s.logger.Error(ctxScan, fmt.Errorf("failed walk dir: %v", err))
 			return nil // Возвращаем nil, чтобы продолжить сканирование остальных файлов
 		}
 
@@ -490,9 +458,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 			if allowedVideoExtension[ext] {
 				info, _ := d.Info()
 
-				entityVideo, err := s.ScanVideo(ctx, info, path)
+				entityVideo, err := s.ScanVideo(ctxScan, info, path)
 				if err != nil {
-					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+					s.logger.Error(ctxScan, fmt.Errorf("failed scan video: %v", err))
 					return nil
 				}
 
@@ -509,9 +477,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 					s.logger.Error(ctx, fmt.Errorf("failed get info: %v", err))
 					return nil
 				}
-				entityFile, err := s.ScanFile(ctx, info, "", path)
+				entityFile, err := s.ScanFile(ctxScan, info, "", path)
 				if err != nil {
-					s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
+					s.logger.Error(ctxScan, fmt.Errorf("failed scan video: %v", err))
 					return nil
 				}
 
@@ -534,9 +502,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	for _, folderItem := range folders {
 		_, ok := browserFileMap[folderItem.Path]
 		if !ok {
-			err = s.repository.DeleteFolder(ctx, folderItem.Id)
+			err = s.repository.DeleteFolder(ctxScan, folderItem.Id)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+				s.logger.Error(ctxScan, fmt.Errorf("failed delete folder: %v", err))
 				return nil, err
 
 			}
@@ -547,9 +515,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	for _, localFolder := range localFolders {
 		folderEntry, ok := foldersEntries[localFolder.Path]
 		if !ok {
-			_, err = s.repository.CreateFolder(ctx, localFolder)
+			_, err = s.repository.CreateFolder(ctxScan, localFolder)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+				s.logger.Error(ctxScan, fmt.Errorf("failed create video: %v", err))
 				return nil, err
 
 			}
@@ -562,19 +530,19 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 			VideosCount:      &browserFile.Folder.VideosCount,
 			ChildFolderCount: &browserFile.Folder.ChildFolderCount,
 		}
-		_, err = s.repository.UpdateFolder(ctx, update, folderEntry.Folder.Id)
+		_, err = s.repository.UpdateFolder(ctxScan, update, folderEntry.Folder.Id)
 		if err != nil {
 			if errors.Is(err, entity.ErrorNoRowsFound) {
 				return nil, nil
 			}
-			s.logger.Error(ctx, fmt.Errorf("failed update video: %v", err))
+			s.logger.Error(ctxScan, fmt.Errorf("failed update video: %v", err))
 			return nil, err
 
 		}
 
 	}
 
-	videos, err := s.repository.GetAllVideo(ctx, "", rootFolder.Id, "", 0, 0, nil)
+	videos, err := s.repository.GetAllVideo(ctxScan, "", rootFolder.Id, "", 0, 0, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -584,11 +552,19 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 		_, ok := browserFileMap[item.Path]
 		if !ok {
 
-			err = s.repository.DeleteVideo(ctx, item.Id)
+			err = s.repository.DeleteVideo(ctxScan, item.Id)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+				s.logger.Error(ctxScan, fmt.Errorf("failed delete folder: %v", err))
 				return nil, err
 
+			}
+
+			if item.Extension == entity.MKV {
+				err = s.playbackService.DeleteHLS(ctxScan, item.Id)
+				if err != nil {
+					s.logger.Error(ctxScan, fmt.Errorf("failed delete video: %v", err))
+					return nil, err
+				}
 			}
 			continue
 		}
@@ -601,6 +577,8 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 		}
 	}
 
+	hlsVideos := make([]entity.Video, 0)
+
 	//создание видео если видео не найдено в базе
 	for _, localVideo := range localVideos {
 		_, ok := videosEntries[localVideo.Path]
@@ -608,26 +586,39 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 
 			if strings.EqualFold(localVideo.Extension, entity.MKV) {
 
-				hlsChan <- localVideo
+				hlsVideos = append(hlsVideos, localVideo)
 
 			} else {
-				err = s.CreateVideo(ctx, &localVideo)
+				err = s.CreateVideo(ctxScan, &localVideo)
 				if err != nil {
-					s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+					s.logger.Error(ctxScan, fmt.Errorf("failed create video: %v", err))
 					continue
 				}
 			}
 		}
-
 	}
-	close(hlsChan)
 
-	err = s.CreateHLSVideo(ctx, hlsChan)
+	//err = s.CreateHLSVideo(ctx, hlsChan)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	hlsChan, err := s.AddHlsJob(ctxScan, hlsVideos)
 	if err != nil {
-		return nil, err
+		s.logger.Error(ctxScan, fmt.Errorf("failed create video: %v", err))
+	}
+	channels := s.fanOutHLS(ctxScan, hlsChan, workers)
+
+	result := s.fanInHLS(ctxScan, channels...)
+
+	for err = range result {
+		if err != nil {
+			s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
+			return nil, err
+		}
 	}
 
-	files, err := s.repository.GetAllFile(ctx, "", rootFolder.Id, "", 0, 0)
+	files, err := s.repository.GetAllFile(ctxScan, "", rootFolder.Id, "", 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -635,9 +626,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	for _, file := range files {
 		_, ok := browserFileMap[file.Path]
 		if !ok {
-			err = s.repository.DeleteFile(ctx, file.Id)
+			err = s.repository.DeleteFile(ctxScan, file.Id)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed delete file: %v", err))
+				s.logger.Error(ctxScan, fmt.Errorf("failed delete file: %v", err))
 				return nil, err
 			}
 			continue
@@ -652,9 +643,9 @@ func (s *Scan) ScanFolder(ctx context.Context, rootFolder entity.Folder) (map[st
 	for _, localFile := range localFiles {
 		_, ok := fileEntries[localFile.Path]
 		if !ok {
-			_, err = s.repository.CreateFile(ctx, localFile)
+			_, err = s.repository.CreateFile(ctxScan, localFile)
 			if err != nil {
-				s.logger.Error(ctx, fmt.Errorf("failed create file: %v", err))
+				s.logger.Error(ctxScan, fmt.Errorf("failed create file: %v", err))
 				return nil, err
 			}
 			continue
@@ -704,6 +695,121 @@ func (s *Scan) ScanFile(_ context.Context, info fs.FileInfo, mime string, path s
 		File: &file,
 	}, nil
 
+}
+
+func (s *Scan) fanInHLS(ctx context.Context, channels ...chan error) chan error {
+	finalStream := make(chan error)
+
+	var wg sync.WaitGroup
+
+	for _, channel := range channels {
+		wg.Add(1)
+
+		chCopy := channel
+
+		go func() {
+			defer wg.Done()
+			for err := range chCopy {
+				select {
+				case <-ctx.Done():
+					return
+				case finalStream <- err:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(finalStream)
+	}()
+
+	return finalStream
+}
+
+func (s *Scan) fanOutHLS(ctx context.Context, inputChan chan entity.Video, workers int) []chan error {
+	resultChannels := make([]chan error, workers)
+	for i := 0; i < workers; i++ {
+		resultChannels[i] = s.StartHls(ctx, inputChan)
+	}
+
+	return resultChannels
+}
+
+func (s *Scan) StartHls(ctx context.Context, hlsChan chan entity.Video) chan error {
+	resultChan := make(chan error)
+	go func() {
+		defer close(resultChan)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case localVideo, ok := <-hlsChan:
+				if !ok {
+					s.logger.Info(ctx, "video hls close: %v", localVideo.Title)
+
+					return
+				}
+				if err := ctx.Err(); err != nil {
+					s.logger.Info(ctx, "video hls cancel: %v", localVideo.Title)
+					return
+				}
+				s.logger.Info(ctx, "video hls started: %v", localVideo.Title)
+				audioTracks, cleanup, err := s.playbackService.PrepareHls(ctx, localVideo)
+				if err != nil {
+					//s.logger.Error(ctx, fmt.Errorf("failed create hls: %v", err))
+					resultChan <- err
+					continue
+				}
+
+				s.logger.Info(ctx, "video hls created: %v", localVideo.Title)
+				err = s.CreateVideo(ctx, &localVideo)
+				if err != nil {
+					resultChan <- err
+					err = cleanup()
+					if err != nil {
+						resultChan <- err
+					}
+					continue
+				}
+
+				_, err = s.repository.CreateAudioTracks(ctx, audioTracks)
+				if err != nil {
+					resultChan <- err
+					err = cleanup()
+					if err != nil {
+						resultChan <- err
+					}
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					continue
+				}
+			}
+		}
+	}()
+
+	return resultChan
+}
+
+func (s *Scan) AddHlsJob(ctx context.Context, videos []entity.Video) (chan entity.Video, error) {
+	hlsChan := make(chan entity.Video, 4)
+	go func() {
+		defer close(hlsChan)
+		for _, localVideo := range videos {
+			select {
+			case <-ctx.Done():
+				return
+			case hlsChan <- localVideo:
+			}
+
+		}
+	}()
+
+	return hlsChan, nil
 }
 
 func (s *Scan) ScanVideo(ctx context.Context, info os.FileInfo, path string) (entity.FileBrowserEntry, error) {

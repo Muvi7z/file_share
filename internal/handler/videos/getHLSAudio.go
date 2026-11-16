@@ -13,7 +13,7 @@ func (h *Handler) GetHLSAudio(c *gin.Context) {
 	audioId := c.Param("audioId")
 	fileName := c.Param("fileName")
 
-	stream, err := h.playbackService.StreamHLS(ctx, fileName, audioId, entity.FileTypeAudio)
+	stream, err := h.videoService.StreamHLS(ctx, fileName, audioId, entity.FileTypeAudio)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, entity.ErrorResponse{
 			Message: err.Error(),

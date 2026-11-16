@@ -31,8 +31,9 @@ import (
 	"file_share/migrations"
 	"file_share/pkg/logger"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/jmoiron/sqlx"
@@ -227,6 +228,8 @@ func (c *Container) GetVideoService() *video.Service {
 			c.GetPosterGenerator(),
 			c.GetLogger(),
 			c.tempDir,
+			c.GetPlaybackService(),
+			c.GetAudioTrackService(),
 		)
 	}
 
@@ -260,7 +263,6 @@ func (c *Container) GetPlaybackService() *playback.Service {
 		c.playbackService = playback.NewService(
 			c.GetMediaProcessor(),
 			c.GetAudioTrackService(),
-			c.GetVideoService(),
 			c.GetFileStorage(),
 			c.configuration.GetWorkDir(),
 		)

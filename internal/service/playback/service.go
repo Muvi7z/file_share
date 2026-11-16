@@ -15,10 +15,6 @@ type mediaProcessor interface {
 	GetAudioTrack(inputPath string) ([]entity.AudioTrackStream, error)
 }
 
-type videoService interface {
-	GetVideoById(ctx context.Context, id string) (entity.Video, error)
-}
-
 type audioService interface {
 	CreateAudioTracks(ctx context.Context, audioTracks []entity.AudioTrack) ([]entity.AudioTrack, error)
 	UpdateAudioTrack(ctx context.Context, audioTrack entity.AudioTrack, id string) (entity.AudioTrack, error)
@@ -32,29 +28,23 @@ type fileStorage interface {
 type Service struct {
 	mediaProcessor mediaProcessor
 	audioService   audioService
-	videoService   videoService
 	fileStorage    fileStorage
 	WorkDir        string
 }
 
-func NewService(mediaProcessor mediaProcessor, audioService audioService, videoService videoService, fileStorage fileStorage, workDir string) *Service {
+func NewService(mediaProcessor mediaProcessor, audioService audioService, fileStorage fileStorage, workDir string) *Service {
 	return &Service{
 		mediaProcessor: mediaProcessor,
 		audioService:   audioService,
-		videoService:   videoService,
 		fileStorage:    fileStorage,
 		WorkDir:        workDir,
 	}
 }
 
-func (s *Service) StreamHLS(ctx context.Context, fileName, id, typeFile string) (entity.FileStream, error) {
-	switch typeFile {
+func (s *Service) StreamHLS(ctx context.Context, fileName string, file entity.FileBrowserEntry) (entity.FileStream, error) {
+	switch file.Type {
 	case entity.FileTypeVideo:
-		video, err := s.videoService.GetVideoById(ctx, id)
-		if err != nil {
-			return entity.FileStream{}, entity.ErrorGetVideo
-		}
-
+		video := file.Video
 		path := filepath.Join(s.WorkDir, video.Id, "video", fileName)
 
 		stream, err := s.fileStorage.Open(ctx, path)
@@ -63,10 +53,7 @@ func (s *Service) StreamHLS(ctx context.Context, fileName, id, typeFile string) 
 		}
 		return stream, nil
 	case entity.FileTypeAudio:
-		audio, err := s.audioService.GetAudioTrackById(ctx, id)
-		if err != nil {
-			return entity.FileStream{}, entity.ErrorGetVideo
-		}
+		audio := file.Audio
 
 		path := filepath.Join(s.WorkDir, audio.VideoId, audio.Id, fileName)
 
@@ -76,10 +63,7 @@ func (s *Service) StreamHLS(ctx context.Context, fileName, id, typeFile string) 
 		}
 		return stream, nil
 	case entity.FileTypePlaylistHLS:
-		video, err := s.videoService.GetVideoById(ctx, id)
-		if err != nil {
-			return entity.FileStream{}, entity.ErrorGetVideo
-		}
+		video := file.Video
 
 		path := filepath.Join(s.WorkDir, video.Id, fileName)
 
@@ -152,4 +136,9 @@ func (s *Service) PrepareHls(ctx context.Context, video entity.Video) ([]entity.
 	//}
 
 	return audioTracks, cleanup, nil
+}
+
+func (s *Service) DeleteHLS(_ context.Context, id string) error {
+	path := filepath.Join(s.WorkDir, id)
+	return os.RemoveAll(path)
 }

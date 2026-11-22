@@ -1,8 +1,8 @@
 package video
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,11 +30,15 @@ func (s *Service) Segment(inputPath, outputDir string) error {
 
 	cmd.Stderr = os.Stderr
 
-	log.Printf("segmenting %s -> %s", inputPath, outputDir)
+	if s.logger != nil {
+		s.logger.Info(context.Background(), "segmenting %s -> %s", inputPath, outputDir)
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg: %w", err)
 	}
 
-	log.Printf("segmentation complete: %s", manifestPath)
+	if s.logger != nil {
+		s.logger.Info(context.Background(), "segmentation complete: %s", manifestPath)
+	}
 	return nil
 }

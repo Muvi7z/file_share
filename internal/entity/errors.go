@@ -57,6 +57,8 @@ var (
 	ErrorReportVideoDelete = errors.New("error report video delete")
 	ErrorReportVideoUpdate = errors.New("error report video update")
 	ErrorReportVideoGet    = errors.New("error report video get")
+
+	ClosePlayer = errors.New("close player")
 )
 
 type ErrorResponse struct {

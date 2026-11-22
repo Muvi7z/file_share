@@ -67,14 +67,14 @@ func (r *Repository) GetAllVideo(ctx context.Context, query, rootFolderId, paren
 		querySql = querySql.Join("folder f on f.id = v.folder_id").Where(sq.Eq{"f.enabled": *enabled})
 	}
 
-	sql, args, err := querySql.ToSql()
+	qSql, args, err := querySql.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("error to building query: %w", err)
 	}
 
 	var rows []VideoRow
 
-	err = r.conn.SelectContext(ctx, &rows, sql, args...)
+	err = r.conn.SelectContext(ctx, &rows, qSql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error to executing query: %w", err)
 	}
@@ -161,7 +161,7 @@ func (r *Repository) updateVideoTx(ctx context.Context, video entity.Video, id s
 		updateMap["stream_url"] = video.StreamUrl
 	}
 
-	sql, args, err := r.qb.Update(videosTable).
+	qSql, args, err := r.qb.Update(videosTable).
 		SetMap(updateMap).
 		Suffix("RETURNING *").
 		Where(sq.Eq{"id": id}).
@@ -172,7 +172,7 @@ func (r *Repository) updateVideoTx(ctx context.Context, video entity.Video, id s
 
 	var row VideoRow
 
-	err = tx.GetContext(ctx, &row, sql, args...)
+	err = tx.GetContext(ctx, &row, qSql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Video{}, err
@@ -253,12 +253,12 @@ func (r *Repository) deleteVideoByFolderTx(ctx context.Context, idRootFolder, pa
 		}
 	}
 
-	sql, args, err := r.qb.Delete(videosTable).Where(whereMap).ToSql()
+	qSql, args, err := r.qb.Delete(videosTable).Where(whereMap).ToSql()
 	if err != nil {
 		return fmt.Errorf("error to building query %v", err)
 	}
 
-	row, err := tx.ExecContext(ctx, sql, args...)
+	row, err := tx.ExecContext(ctx, qSql, args...)
 	if err != nil {
 		return fmt.Errorf("error to executing query %v", err)
 	}
@@ -276,12 +276,12 @@ func (r *Repository) deleteVideoByFolderTx(ctx context.Context, idRootFolder, pa
 }
 
 func (r *Repository) deleteVideoByIdTx(ctx context.Context, id string, tx *sqlx.Tx) error {
-	sql, args, err := r.qb.Delete(videosTable).Where(sq.Eq{"id": id}).ToSql()
+	qSql, args, err := r.qb.Delete(videosTable).Where(sq.Eq{"id": id}).ToSql()
 	if err != nil {
 		return fmt.Errorf("error to building query %v", err)
 	}
 
-	row, err := tx.ExecContext(ctx, sql, args...)
+	row, err := tx.ExecContext(ctx, qSql, args...)
 	if err != nil {
 		return fmt.Errorf("error to executing query %v", err)
 	}
@@ -317,7 +317,7 @@ func (r *Repository) createVideoTx(ctx context.Context, video entity.Video, tx *
 		"path":             video.Path,
 	}
 
-	sql, args, err := r.qb.Insert(videosTable).
+	qSql, args, err := r.qb.Insert(videosTable).
 		SetMap(insertMap).
 		Suffix("RETURNING *").
 		ToSql()
@@ -328,7 +328,7 @@ func (r *Repository) createVideoTx(ctx context.Context, video entity.Video, tx *
 	var row VideoRow
 	var result entity.Video
 
-	err = tx.GetContext(ctx, &row, sql, args...)
+	err = tx.GetContext(ctx, &row, qSql, args...)
 	if err != nil {
 		return entity.Video{}, fmt.Errorf("error to executing query: %w", err)
 	}
@@ -358,7 +358,7 @@ func (r *Repository) GetVideoById(ctx context.Context, id string) (entity.Video,
 	whereMap := map[string]any{
 		"id": id,
 	}
-	sql, args, err := r.qb.Select("*").
+	qSql, args, err := r.qb.Select("*").
 		From(videosTable).
 		Where(whereMap).
 		ToSql()
@@ -368,9 +368,50 @@ func (r *Repository) GetVideoById(ctx context.Context, id string) (entity.Video,
 
 	var row VideoRow
 
-	err = r.conn.GetContext(ctx, &row, sql, args...)
+	err = r.conn.GetContext(ctx, &row, qSql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			return entity.Video{}, entity.ErrorNotFoundVideo
+		}
+		return entity.Video{}, fmt.Errorf("error to executing query: %w", err)
+	}
+
+	return entity.Video{
+		Id:             row.Id,
+		Title:          row.Title,
+		FolderId:       row.FolderId,
+		FolderName:     row.FolderName,
+		ParentFolderId: row.ParentFolderId,
+		Size:           row.Size,
+		SizeBytes:      row.SizeBytes,
+		Duration:       row.Duration,
+		ModifiedAt:     row.ModifiedAt,
+		Codec:          row.Codec,
+		Resolution:     row.Resolution,
+		PosterUrl:      row.PosterUrl,
+		StreamUrl:      row.StreamUrl,
+		Path:           row.Path,
+		Extension:      row.Extension.String,
+	}, nil
+}
+
+func (r *Repository) GetVideoByPath(ctx context.Context, path string) (entity.Video, error) {
+	whereMap := map[string]any{
+		"path": path,
+	}
+	qSql, args, err := r.qb.Select("*").
+		From(videosTable).
+		Where(whereMap).
+		ToSql()
+	if err != nil {
+		return entity.Video{}, fmt.Errorf("error to building query: %w", err)
+	}
+
+	var row VideoRow
+
+	err = r.conn.GetContext(ctx, &row, qSql, args...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
 			return entity.Video{}, entity.ErrorNotFoundVideo
 		}
 		return entity.Video{}, fmt.Errorf("error to executing query: %w", err)

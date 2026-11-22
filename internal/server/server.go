@@ -12,6 +12,7 @@ import (
 	"file_share/internal/handler/report"
 	"file_share/internal/handler/scan"
 	videosHandler "file_share/internal/handler/videos"
+	"file_share/internal/handler/ws"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +24,7 @@ type Server struct {
 	authHandler    *auth.Handler
 	scanHandler    *scan.Handler
 	fileHandler    *file.Handler
+	wsHandler      *ws.Handler
 	logger         deps.Logger
 	addr           string
 	server         *http.Server
@@ -40,6 +42,7 @@ func NewServer(
 	authMiddleware *middleware.Middleware,
 	fileHandler *file.Handler,
 	reportHandler *report.Handler,
+	wsHandler *ws.Handler,
 ) *Server {
 	s := &Server{
 		videosHandler:  videosHandler,
@@ -51,6 +54,7 @@ func NewServer(
 		authHandler:    authHandler,
 		authMiddleware: authMiddleware,
 		reportHandler:  reportHandler,
+		wsHandler:      wsHandler,
 	}
 
 	router := s.Register(gin.Default())
@@ -137,6 +141,14 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 			folders.DELETE("/:folderId", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.DeleteFolder)
 			folders.GET("/:folderId/entries", s.folderHandler.GetFoldersEntries)
 			folders.GET("/:folderId/rescan", s.authMiddleware.Apply(entity.RoleAdmin), s.folderHandler.FolderRescan)
+		}
+
+		api.GET("/ws", s.wsHandler.Connect)
+
+		tv := api.Group("/tv")
+		{
+			tv.POST("/open", s.wsHandler.OpenOnTV)
+			tv.POST("/play/now", s.wsHandler.PlayNowOnTV)
 		}
 
 		api.GET("/scan-jobs/:jobId", s.scanHandler.GetScanJob)

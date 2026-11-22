@@ -2,68 +2,191 @@ package ws
 
 import (
 	"context"
-	"encoding/json"
 	"file_share/internal/entity"
 	"sync"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+)
+
+type Client struct {
+	Device entity.Device
+	Conn   *websocket.Conn
+}
+
+const (
+	writeTimeout = 5 * time.Second
+	pingInterval = 25 * time.Second
+	pingTimeout  = 10 * time.Second
+)
+
+const (
+	MsgTypeTVDevices           = "tv.devices"
+	MsgTypeOpenOnTV            = "tv.open"
+	MsgTypePlayNowOnTV         = "tv.playnow"
+	MsgTypeNotifyLibraryUpdate = "library.update"
 )
 
 type Hub struct {
 	mu      sync.RWMutex
-	clients map[*Client]struct{}
+	clients map[string]*Client
 }
 
 func NewHub() *Hub {
-	return &Hub{}
-}
-
-func (h *Hub) Register(ctx context.Context, client *Client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.clients[client] = struct{}{}
-
-	if client.device.Type == entity.DeviceTypeTV {
-		h.broadcastTVList()
+	return &Hub{
+		clients: make(map[string]*Client),
+		mu:      sync.RWMutex{},
 	}
 }
 
-func (h *Hub) Unregister(ctx context.Context, client *Client) {
+func (h *Hub) Register(_ context.Context, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	_, exists := h.clients[client]
+	h.clients[client.Device.Id] = client
+
+	if client.Device.Type == entity.DeviceTypeTV {
+		go h.broadcastTVList()
+	} else {
+		go h.SentTVListTo(client)
+	}
+
+}
+
+func (h *Hub) Unregister(_ context.Context, client *Client) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, exists := h.clients[client.Device.Id]
 	if exists {
-		delete(h.clients, client)
-		close(client.send)
+		delete(h.clients, client.Device.Id)
+
+		if client.Device.Type == entity.DeviceTypeTV {
+			go h.broadcastTVList()
+		}
 	}
 
 }
 
-func (h *Hub) GetTVDevices(ctx context.Context) ([]entity.Device, error) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	return nil, nil
-}
-
-func (h *Hub) broadcastTVList() {
-	devices := h.GetTVDevices(context.Background())
-	h.broadcast("tv.devices", devices)
-}
-
-func (h *Hub) broadcast(msgType string, payload any) {
-	data, err := marshalEnvelope(msgType, payload)
-	if err != nil {
-		return
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, client := range h.clients {
+		_ = client.Conn.Close(websocket.StatusGoingAway, "server shutting down")
+		delete(h.clients, id)
 	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for c := range h.clients {
+}
+
+func (h *Hub) NotifyLibraryUpdated(ctx context.Context, entry entity.CmdUpdateLibrary) {
+	h.broadcast(ctx, entity.Message{
+		Type:    MsgTypeNotifyLibraryUpdate,
+		Payload: entry,
+	}, "-1")
+}
+
+func (h *Hub) KeepAlive(ctx context.Context, conn *websocket.Conn) {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	for {
 		select {
-		case c.send <- data:
-		default:
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
+			err := conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				return // Клиент не ответил на Ping — выходим, сработает defer Unregister и conn.Close
+			}
 		}
 	}
 }
 
-func marshalEnvelope(msgType string, payload any) ([]byte, error) {
-	return json.Marshal(map[string]interface{}{})
+func (h *Hub) GetTVDevices(_ context.Context) []entity.Device {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	devices := make([]entity.Device, 0, len(h.clients))
+	for _, client := range h.clients {
+		if client.Device.Type == entity.DeviceTypeTV {
+			devices = append(devices, client.Device)
+
+		}
+	}
+
+	return devices
+}
+
+func (h *Hub) broadcast(ctx context.Context, msg entity.Message, deliverId string) {
+	h.mu.RLock()
+	targets := make([]*Client, 0, len(h.clients))
+	for _, client := range h.clients {
+		if deliverId != client.Device.Id {
+			targets = append(targets, client)
+		}
+	}
+	h.mu.RUnlock()
+
+	var wg sync.WaitGroup
+
+	for _, item := range targets {
+		wg.Add(1)
+		go func(c *Client) {
+			defer wg.Done()
+			writeCtx, cancel := context.WithTimeout(ctx, writeTimeout)
+			defer cancel()
+			_ = wsjson.Write(writeCtx, c.Conn, msg)
+		}(item)
+	}
+
+	wg.Wait()
+	return
+}
+
+func (h *Hub) broadcastTVList() {
+	ctx := context.Background()
+
+	h.broadcast(ctx, entity.Message{
+		Type:    MsgTypeTVDevices,
+		Payload: h.GetTVDevices(ctx),
+	}, "-1")
+}
+
+func (h *Hub) SentTVListTo(c *Client) {
+	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+	defer cancel()
+
+	_ = wsjson.Write(ctx, c.Conn, entity.Message{
+		Type:    MsgTypeTVDevices,
+		Payload: h.GetTVDevices(ctx),
+	})
+}
+
+func (h *Hub) SendPlayNowOnTV(ctx context.Context, cmd entity.CmdPlayNowOnTV) error {
+	msg := entity.Message{
+		Type:    MsgTypePlayNowOnTV,
+		Payload: cmd,
+	}
+
+	h.broadcast(ctx, msg, cmd.DeviceId)
+
+	return nil
+}
+
+func (h *Hub) SendOpenOnTV(ctx context.Context, cmd entity.CmdOpenOnTV) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	client, ok := h.clients[cmd.DeviceId]
+
+	if ok {
+		if client.Device.Type == entity.DeviceTypeTV {
+			msg := entity.Message{
+				Type:    MsgTypeOpenOnTV,
+				Payload: cmd,
+			}
+			_ = wsjson.Write(ctx, client.Conn, msg)
+		}
+	}
+
+	return nil
 }

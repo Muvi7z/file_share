@@ -12,8 +12,10 @@ import (
 	report2 "file_share/internal/handler/report"
 	scan2 "file_share/internal/handler/scan"
 	"file_share/internal/handler/videos"
+	ws2 "file_share/internal/handler/ws"
 	"file_share/internal/infrastructure/ffmpeg"
 	fsnotify2 "file_share/internal/infrastructure/fsnotify"
+	"file_share/internal/infrastructure/ws"
 	"file_share/internal/repository"
 	cacheRepo "file_share/internal/repository/cache"
 	"file_share/internal/server"
@@ -25,6 +27,7 @@ import (
 	"file_share/internal/service/report"
 	"file_share/internal/service/scan"
 	"file_share/internal/service/token"
+	"file_share/internal/service/tv"
 	"file_share/internal/service/video"
 	"file_share/internal/service/videoFixer"
 	"file_share/internal/storage"
@@ -34,7 +37,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-
 	"github.com/gomodule/redigo/redis"
 	"github.com/jmoiron/sqlx"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -56,6 +58,7 @@ type Container struct {
 	reportService     *report.Service
 	audioTrackService *audioTrack.Service
 	playbackService   *playback.Service
+	tvService         *tv.Service
 
 	reportHandler  *report2.Handler
 	folderHandler  *folder2.Handler
@@ -63,8 +66,10 @@ type Container struct {
 	filesHandler   *file2.Handler
 	scanHandler    *scan2.Handler
 	authHandler    *auth2.Handler
+	wsHandler      *ws2.Handler
 	authMiddleware *middleware.Middleware
 
+	hub            *ws.Hub
 	mediaProcessor *ffmpeg.FFMPEG
 	fsWatcher      *fsnotify.Watcher
 	fsNotify       *fsnotify2.FSNotify
@@ -279,10 +284,23 @@ func (c *Container) GetScanService() *scan.Scan {
 			c.GetPosterGenerator(),
 			c.GetPlaybackService(),
 			c.GetFSNotify(),
+			c.GetHub(),
 		)
 	}
 
 	return c.scanService
+}
+
+func (c *Container) GetTVService() *tv.Service {
+	if c.tvService == nil {
+		c.tvService = tv.NewService(
+			c.GetLogger(),
+			c.GetHub(),
+			c.GetVideoService(),
+		)
+	}
+
+	return c.tvService
 }
 
 func (c *Container) GetMediaProcessor() *ffmpeg.FFMPEG {
@@ -398,6 +416,18 @@ func (c *Container) GetAuthHandler() *auth2.Handler {
 	return c.authHandler
 }
 
+func (c *Container) GetWSHandler() *ws2.Handler {
+	if c.wsHandler == nil {
+		c.wsHandler = ws2.NewHandler(
+			c.GetLogger(),
+			c.GetHub(),
+			c.GetTVService(),
+		)
+	}
+
+	return c.wsHandler
+}
+
 func (c *Container) GetAuthMiddleware() *middleware.Middleware {
 	if c.authMiddleware == nil {
 		c.authMiddleware = middleware.NewMiddleware(
@@ -407,6 +437,14 @@ func (c *Container) GetAuthMiddleware() *middleware.Middleware {
 	}
 
 	return c.authMiddleware
+}
+
+func (c *Container) GetHub() *ws.Hub {
+	if c.hub == nil {
+		c.hub = ws.NewHub()
+	}
+
+	return c.hub
 }
 
 func (c *Container) GetServer() *server.Server {
@@ -422,6 +460,7 @@ func (c *Container) GetServer() *server.Server {
 			c.GetAuthMiddleware(),
 			c.GetFileHandler(),
 			c.GetReportVideoHandler(),
+			c.GetWSHandler(),
 		)
 	}
 

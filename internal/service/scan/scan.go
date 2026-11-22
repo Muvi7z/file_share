@@ -22,18 +22,23 @@ import (
 
 type repository interface {
 	GetAllScanJob(ctx context.Context, status string) ([]entity.ScanJob, error)
+
 	GetFolderById(ctx context.Context, id string) (entity.Folder, error)
 	CreateFolder(ctx context.Context, folder entity.Folder) (entity.Folder, error)
-	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
-	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64, enabled *bool) ([]entity.Video, error)
-	DeleteVideo(ctx context.Context, id string) error
 	UpdateFolder(ctx context.Context, folder entity.UpdateFolderRequest, id string) (entity.Folder, error)
 	GetFolders(ctx context.Context, query, rootFolderId, parentFolderId string, isRoot, enabled *bool) ([]entity.Folder, error)
 	DeleteFolder(ctx context.Context, id string) error
+
+	CreateVideo(ctx context.Context, video entity.Video) (entity.Video, error)
+	GetAllVideo(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64, enabled *bool) ([]entity.Video, error)
+	DeleteVideo(ctx context.Context, id string) error
+	GetVideoByPath(ctx context.Context, path string) (entity.Video, error)
+
+	CreateAudioTracks(ctx context.Context, audioTracks []entity.AudioTrack) ([]entity.AudioTrack, error)
+
 	GetAllFile(ctx context.Context, query, rootFolderId, parentFolderId string, limit uint64, offset uint64) ([]entity.File, error)
 	CreateFile(ctx context.Context, file entity.File) (entity.File, error)
 	DeleteFile(ctx context.Context, id string) error
-	CreateAudioTracks(ctx context.Context, audioTracks []entity.AudioTrack) ([]entity.AudioTrack, error)
 }
 
 type scanJobRepository interface {
@@ -55,6 +60,10 @@ type fsWatcher interface {
 	Add(ctx context.Context, path string) error
 	Remove(ctx context.Context, path string) error
 	GetEventsChannel() <-chan fsnotify.Event
+}
+
+type hub interface {
+	NotifyLibraryUpdated(ctx context.Context, entry entity.CmdUpdateLibrary)
 }
 
 type watchFile struct {
@@ -90,6 +99,7 @@ type Scan struct {
 	posterGenerator   posterGenerator
 	playbackService   playbackService
 	fsWatcher         fsWatcher
+	hub               hub
 }
 
 func New(
@@ -99,6 +109,7 @@ func New(
 	posterGenerator posterGenerator,
 	playbackService playbackService,
 	fsWatcher fsWatcher,
+	hub hub,
 ) *Scan {
 	return &Scan{
 		logger:            logger,
@@ -107,6 +118,7 @@ func New(
 		posterGenerator:   posterGenerator,
 		playbackService:   playbackService,
 		fsWatcher:         fsWatcher,
+		hub:               hub,
 	}
 }
 
@@ -230,31 +242,33 @@ func (s *Scan) StartAutoScan(ctx context.Context) error {
 						ext := filepath.Ext(fileName)
 						parentFolder := mapFolders[folderPath]
 
+						var entityFile entity.FileBrowserEntry
+
 						if allowedVideoExtension[ext] {
-							entityVideo, err := s.ScanVideo(ctx, info, event.Name)
+							entityFile, err = s.ScanVideo(ctx, info, event.Name)
 							if err != nil {
 								s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
 								continue
 							}
-							entityVideo.Video.ParentFolderId = parentFolder.Id
-							entityVideo.Video.FolderName = parentFolder.Name
-							entityVideo.Video.FolderId = parentFolder.RootFolderId
+							entityFile.Video.ParentFolderId = parentFolder.Id
+							entityFile.Video.FolderName = parentFolder.Name
+							entityFile.Video.FolderId = parentFolder.RootFolderId
 
 							fileWatch.Status = StatusWatchCompleted
 
 							mapFiles[event.Name] = fileWatch
 							if strings.EqualFold(ext, entity.MKV) {
-								hlsChan <- *entityVideo.Video
+								hlsChan <- *entityFile.Video
 
 							} else {
-								err = s.CreateVideo(ctx, entityVideo.Video)
+								err = s.CreateVideo(ctx, entityFile.Video)
 								if err != nil {
 									s.logger.Error(ctx, fmt.Errorf("failed create video: %v", err))
 									continue
 								}
 							}
 						} else {
-							entityFile, err := s.ScanFile(ctx, info, "", event.Name)
+							entityFile, err = s.ScanFile(ctx, info, "", event.Name)
 							if err != nil {
 								s.logger.Error(ctx, fmt.Errorf("failed scan video: %v", err))
 								continue
@@ -269,6 +283,13 @@ func (s *Scan) StartAutoScan(ctx context.Context) error {
 								continue
 							}
 						}
+
+						cmd := entity.CmdUpdateLibrary{
+							File: entityFile,
+							Type: entity.CmdFileAdd,
+						}
+
+						s.hub.NotifyLibraryUpdated(ctx, cmd)
 
 						err = file.Close()
 						if err != nil {
@@ -297,15 +318,54 @@ func (s *Scan) StartAutoScan(ctx context.Context) error {
 						if err != nil {
 							s.logger.Error(ctx, errors.New("error to close file"))
 
-							return
+							continue
 						}
+						mapFiles[event.Name] = watchFile{
+							Status: StatusWatchWriting,
+							Path:   event.Name,
+						}
+					} else {
+						fileWatch.Status = StatusWatchWriting
+					}
+				case fsnotify.Remove:
+					var entityFile entity.FileBrowserEntry
+
+					fileName := filepath.Base(event.Name) // "my_video.mp4"
+					ext := filepath.Ext(fileName)
+					if allowedVideoExtension[ext] {
+						video, err := s.repository.GetVideoByPath(ctx, event.Name)
+						if err != nil {
+							s.logger.Info(ctx, "error to get video by path", event.Name)
+							continue
+						}
+
+						entityFile = entity.FileBrowserEntry{
+							Type:  entity.FileTypeVideo,
+							Video: &video,
+						}
+
+						err = s.repository.DeleteVideo(ctx, video.Id)
+						if err != nil {
+							s.logger.Error(ctx, fmt.Errorf("failed delete folder: %v", err))
+							continue
+						}
+
+					}
+					_, okFile := mapFiles[event.Name]
+					if okFile {
+						delete(mapFiles, event.Name)
+					}
+					cmd := entity.CmdUpdateLibrary{
+						File: entityFile,
+						Type: entity.CmdFileDelete,
 					}
 
+					s.hub.NotifyLibraryUpdated(ctx, cmd)
 				default:
 					s.logger.Info(ctx, "event unhandled default case")
 				}
 				//если файл большой, то при копировании он помечается create
-				// нужно отслеживать его путь и смотреть после получения инвента write, размер файла, если он изменился значит файл все еще копируется
+				// нужно отслеживать его путь и смотреть после получения события write, размер файла, если он изменился значит файл все еще копируется
 
 			}
 		}

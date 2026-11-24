@@ -8,6 +8,7 @@ import (
 
 func SessionToRedisView(session entity.Session) entity.SessionRedisView {
 	return entity.SessionRedisView{
+		Id:        session.Id,
 		Token:     session.Token,
 		Login:     session.Login,
 		Role:      session.Role,
@@ -22,6 +23,7 @@ func SessionFromRedisView(session entity.SessionRedisView) (entity.Session, erro
 	}
 
 	return entity.Session{
+		Id:        session.Id,
 		Token:     session.Token,
 		Login:     session.Login,
 		Role:      session.Role,

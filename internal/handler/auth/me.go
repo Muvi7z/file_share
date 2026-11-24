@@ -1,22 +1,29 @@
 package auth
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) Me(c *gin.Context) {
 	ctx := c.Request.Context()
-	header := c.GetHeader("Authorization")
-	parts := strings.Split(header, " ")
 
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error not found bearer"})
-		return
+	token, _ := c.Cookie(AccessCookieName)
+	if token == "" {
+		if header := c.GetHeader("Authorization"); header != "" {
+			parts := strings.SplitN(header, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				token = parts[1]
+			}
+		}
 	}
 
-	token := parts[1]
+	if token == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token not found"})
+		return
+	}
 
 	user, err := h.authService.Me(ctx, token)
 	if err != nil {

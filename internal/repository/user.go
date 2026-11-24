@@ -14,13 +14,13 @@ import (
 var userTable = `"user"`
 
 type userRow struct {
-	Id           string    `db:"id"`
-	Login        string    `db:"login"`
-	PasswordHash string    `db:"password_hash"`
-	Role         string    `db:"role"`
-	Status       string    `db:"status"`
-	CreatedAt    time.Time `db:"created_at"`
-	UpdatedAt    time.Time `db:"updated_at"`
+	Id           string         `db:"id"`
+	Login        string         `db:"login"`
+	PasswordHash string         `db:"password_hash"`
+	Role         string         `db:"role"`
+	Status       sql.NullString `db:"status"`
+	CreatedAt    time.Time      `db:"created_at"`
+	UpdatedAt    time.Time      `db:"updated_at"`
 }
 
 func (r *Repository) CreateUser(ctx context.Context, user entity.User) (entity.User, error) {
@@ -135,4 +135,38 @@ func (r *Repository) getUserByLoginTx(ctx context.Context, login string, tx *sql
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}, err
+}
+
+func (r *Repository) GetUserById(ctx context.Context, id string) (entity.User, error) {
+	whereMap := map[string]any{
+		"id": id,
+	}
+
+	req, args, err := r.qb.Select("id").
+		Columns("login", "password_hash", "role", "status", "created_at", "updated_at").
+		From(userTable).
+		Where(whereMap).
+		ToSql()
+	if err != nil {
+		return entity.User{}, fmt.Errorf("error building query: %w", err)
+	}
+
+	var row userRow
+	err = r.conn.GetContext(ctx, &row, req, args...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return entity.User{}, err
+		}
+		return entity.User{}, fmt.Errorf("error executing query: %w", err)
+	}
+
+	return entity.User{
+		Id:           row.Id,
+		Login:        row.Login,
+		PasswordHash: row.PasswordHash,
+		Role:         entity.Role(row.Role),
+		Status:       row.Status.String,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}, nil
 }

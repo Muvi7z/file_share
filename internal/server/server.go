@@ -80,16 +80,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func LiberalCORS(c *gin.Context) {
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
-
-	if c.Request.Method == "OPTIONS" {
-		if len(c.Request.Header["Access-Control-Request-Headers"]) > 0 {
-			c.Header("Access-Control-Allow-Headers",
-				c.Request.Header["Access-Control-Request-Headers"][0])
-		}
-		c.AbortWithStatus(http.StatusOK)
+	if origin := c.GetHeader("Origin"); origin != "" {
+		c.Header("Access-Control-Allow-Origin", origin)
+		c.Header("Vary", "Origin")
+		c.Header("Access-Control-Allow-Credentials", "true")
 	}
+	c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	if c.Request.Method == http.MethodOptions {
+		if reqHeaders := c.GetHeader("Access-Control-Request-Headers"); reqHeaders != "" {
+			c.Header("Access-Control-Allow-Headers", reqHeaders)
+		}
+		c.AbortWithStatus(http.StatusNoContent)
+		return
+	}
+	c.Next()
 }
 
 func (s *Server) Register(router *gin.Engine) *gin.Engine {
@@ -104,6 +108,8 @@ func (s *Server) Register(router *gin.Engine) *gin.Engine {
 		{
 			authGroup.POST("/login", s.authHandler.Login)
 			authGroup.POST("/register", s.authHandler.Register)
+			authGroup.POST("/refresh", s.authHandler.Refresh)
+			authGroup.POST("/logout", s.authHandler.Logout)
 			authGroup.POST("/me", s.authMiddleware.Apply(entity.RoleUser, entity.RoleAdmin), s.authHandler.Me)
 		}
 

@@ -6,21 +6,24 @@ import (
 )
 
 func (s *Service) Me(ctx context.Context, token string) (entity.MeUser, error) {
-	session, err := s.sessionRepository.GetSession(ctx, token)
+	//session, err := s.sessionRepository.GetSession(ctx, token)
+	//if err != nil {
+	//	return entity.MeUser{}, entity.ErrorAuthMe
+	//}
+
+	claims, err := s.tokenService.ValidateToken(token)
 	if err != nil {
-		return entity.MeUser{}, entity.ErrorAuthMe
+		return entity.MeUser{}, err
 	}
 
-	user, err := s.userRepository.GetUserByLogin(ctx, session.Login)
+	user, err := s.userRepository.GetUserById(ctx, claims.UserId)
 	if err != nil {
 		return entity.MeUser{}, entity.ErrorAuthMe
 	}
 
 	res := entity.MeUser{
-		Token:     token,
-		Login:     user.Login,
-		Role:      user.Role,
-		ExpiresAt: session.ExpiresAt,
+		Login: user.Login,
+		Role:  user.Role,
 	}
 
 	return res, nil

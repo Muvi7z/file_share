@@ -27,6 +27,7 @@ const (
 	envWorkDir    = "WORK_DIR"
 
 	envJWTSecret            = "JWT_SECRET"
+	envJWTTtl               = "JWT_TTL"
 	envDefaultAdminLogin    = "DEFAULT_ADMIN_LOGIN"
 	envDefaultAdminPassword = "DEFAULT_ADMIN_PASSWORD"
 )
@@ -108,6 +109,10 @@ func newFromEnv() (*configuration, error) {
 	c.redisConfiguration = rc
 
 	c.jwtSecret = getStringFromEnvOrDefault(envJWTSecret, "default-secret-key-change-me")
+	c.jwtTTL, err = getDurationFromEnvOrDefault(envJWTTtl, time.Minute*15)
+	if err != nil {
+		return nil, fmt.Errorf("error getting jwt ttl: %s", err)
+	}
 	c.defaultAdminLogin = getStringFromEnvOrDefault(envDefaultAdminLogin, "admin")
 	c.defaultAdminPassword = getStringFromEnvOrDefault(envDefaultAdminPassword, "admin")
 
@@ -121,6 +126,7 @@ type configuration struct {
 	posterDir             string
 	workDir               string
 	jwtSecret             string
+	jwtTTL                time.Duration
 	defaultAdminLogin     string
 	defaultAdminPassword  string
 }
@@ -193,6 +199,10 @@ func (sc *serverConfiguration) GetAddress() string {
 
 func (c *configuration) GetJWTSecret() string {
 	return c.jwtSecret
+}
+
+func (c *configuration) GetJWTTtl() time.Duration {
+	return c.jwtTTL
 }
 
 func (c *configuration) GetDefaultAdminLogin() string {

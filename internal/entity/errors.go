@@ -59,6 +59,9 @@ var (
 	ErrorReportVideoGet    = errors.New("error report video get")
 
 	ClosePlayer = errors.New("close player")
+
+	ErrInvalidToken = errors.New("invalid token")
+	ErrExpiredToken = errors.New("expired token")
 )
 
 type ErrorResponse struct {

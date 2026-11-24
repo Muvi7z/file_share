@@ -2,12 +2,12 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"file_share/internal/deps"
 	"file_share/internal/entity"
 	"file_share/internal/service/roles"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -53,43 +53,45 @@ func (m *Middleware) Apply(allowed ...entity.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
-		header := c.GetHeader("Authorization")
+		token, _ := c.Cookie("access_token")
 
-		if len(header) == 0 {
-			_, ok := roleList[entity.RoleViewer]
-			if ok {
+		if token == "" {
+			if header := c.GetHeader("Authorization"); header != "" {
+				parts := strings.SplitN(header, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					token = parts[1]
+				}
+			}
+		}
+
+		if token == "" {
+			if _, ok := roleList[entity.RoleViewer]; ok {
 				ctx = context.WithValue(ctx, "role", entity.RoleViewer)
 				c.Request = c.Request.WithContext(ctx)
 				c.Next()
 				return
 			}
-
-			c.AbortWithStatusJSON(403, gin.H{
-				"error": "forbidden",
+			// 401 (а не 403), чтобы фронт понимал: нужно авторизоваться / обновить токен
+			c.AbortWithStatusJSON(http.StatusUnauthorized, entity.ErrorResponse{
+				Message: "Unauthorized",
+				Code:    "401",
 			})
 			return
 		}
 
-		parts := strings.Split(header, " ")
-
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error not found bearer"})
-			return
-		}
-
-		token := parts[1]
-
 		user, err := m.authService.Me(ctx, token)
 		if err != nil {
+			if errors.Is(err, entity.ErrExpiredToken) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, entity.ErrorResponse{
+					Message: "Unauthorized",
+					Code:    "401",
+				})
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusForbidden, entity.ErrorResponse{
 				Message: "Forbidden",
 				Code:    "403",
 			})
-			return
-		}
-
-		if user.ExpiresAt.Before(time.Now()) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token has expired"})
 			return
 		}
 

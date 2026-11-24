@@ -15,6 +15,7 @@ import (
 	ws2 "file_share/internal/handler/ws"
 	"file_share/internal/infrastructure/ffmpeg"
 	fsnotify2 "file_share/internal/infrastructure/fsnotify"
+	"file_share/internal/infrastructure/jwt"
 	"file_share/internal/infrastructure/ws"
 	"file_share/internal/repository"
 	cacheRepo "file_share/internal/repository/cache"
@@ -26,7 +27,6 @@ import (
 	"file_share/internal/service/playback"
 	"file_share/internal/service/report"
 	"file_share/internal/service/scan"
-	"file_share/internal/service/token"
 	"file_share/internal/service/tv"
 	"file_share/internal/service/video"
 	"file_share/internal/service/videoFixer"
@@ -52,7 +52,7 @@ type Container struct {
 	videoService      *video.Service
 	scanService       *scan.Scan
 	videoFixService   *videoFixer.VideoFixer
-	tokenService      *token.Service
+	tokenProvider     *jwt.Token
 	authService       *auth.Service
 	fileService       *file.Service
 	reportService     *report.Service
@@ -165,11 +165,13 @@ func (c *Container) GetMigrator() *migrations.Migrator {
 	return c.migrator
 }
 
-func (c *Container) GetTokenService() *token.Service {
-	if c.tokenService == nil {
-		c.tokenService = token.New([]byte(c.configuration.GetJWTSecret()))
+func (c *Container) GetTokenService() *jwt.Token {
+	if c.tokenProvider == nil {
+		bytes := []byte(c.configuration.GetJWTSecret())
+		ttl := c.configuration.GetJWTTtl()
+		c.tokenProvider = jwt.NewToken(bytes, ttl)
 	}
-	return c.tokenService
+	return c.tokenProvider
 }
 
 func (c *Container) GetRepository() *repository.Repository {
@@ -410,6 +412,9 @@ func (c *Container) GetAuthHandler() *auth2.Handler {
 		c.authHandler = auth2.NewHandler(
 			c.GetAuthService(),
 			c.GetLogger(),
+			false,
+			c.configuration.GetJWTTtl(),
+			c.configuration.redisConfiguration.GetCacheTTL(),
 		)
 	}
 

@@ -20,15 +20,23 @@ type User struct {
 }
 
 type MeUser struct {
-	Token     string    `json:"token"`
-	Login     string    `json:"login"`
-	Role      Role      `json:"role"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	Login string `json:"login"`
+	Role  Role   `json:"role"`
 }
 
 type LoginUser struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
+}
+
+type Token struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+type LoginResponse struct {
+	Token Token  `json:"token"`
+	User  MeUser `json:"user"`
 }
 
 type RegisterUser struct {

@@ -2,8 +2,9 @@ package auth
 
 import (
 	"file_share/internal/entity"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) Login(c *gin.Context) {
@@ -16,11 +17,12 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	session, err := h.authService.Login(ctx, dataRequest)
+	res, err := h.authService.Login(ctx, dataRequest)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "error to login"})
 		return
 	}
 
-	c.JSON(http.StatusOK, session)
+	h.setAuthCookies(c, res.Token.AccessToken, res.Token.RefreshToken, h.accessTokenTTL, h.refreshTokenTTL)
+	c.JSON(http.StatusOK, res.User)
 }

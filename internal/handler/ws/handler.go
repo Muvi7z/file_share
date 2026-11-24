@@ -11,7 +11,7 @@ import (
 
 type tvService interface {
 	OpenOnTV(ctx context.Context, msg entity.CmdOpenOnTV) error
-	PlayNowOnTV(ctx context.Context, cmd entity.CmdPlayNowOnTV) error
+	TvNowPlaying(ctx context.Context, cmd entity.CmdPlayNowOnTV) error
 }
 
 type hub interface {

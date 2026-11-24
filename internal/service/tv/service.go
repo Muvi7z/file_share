@@ -10,7 +10,7 @@ import (
 
 type Hub interface {
 	SendOpenOnTV(ctx context.Context, cmd entity.CmdOpenOnTV) error
-	SendPlayNowOnTV(ctx context.Context, cmd entity.CmdPlayNowOnTV) error
+	SendTVNowPlaying(ctx context.Context, cmd entity.CmdPlayNowOnTV) error
 	Register(ctx context.Context, client *ws.Client)
 	Unregister(ctx context.Context, client *ws.Client)
 }
@@ -33,7 +33,7 @@ func NewService(logger deps.Logger, hub Hub, videoService videoService) *Service
 	}
 }
 
-func (s *Service) PlayNowOnTV(ctx context.Context, cmd entity.CmdPlayNowOnTV) error {
+func (s *Service) TvNowPlaying(ctx context.Context, cmd entity.CmdPlayNowOnTV) error {
 	if cmd.Entry.Id == "" {
 		return entity.ClosePlayer
 	}
@@ -43,7 +43,7 @@ func (s *Service) PlayNowOnTV(ctx context.Context, cmd entity.CmdPlayNowOnTV) er
 		return err
 	}
 
-	err = s.hub.SendPlayNowOnTV(ctx, cmd)
+	err = s.hub.SendTVNowPlaying(ctx, cmd)
 	if err != nil {
 		s.logger.Error(ctx, err)
 		return err

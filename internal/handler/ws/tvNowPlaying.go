@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *Handler) PlayNowOnTV(c *gin.Context) {
+func (h *Handler) TvNowPlaying(c *gin.Context) {
 	var request entity.CmdPlayNowOnTV
 
 	ctx := c.Request.Context()
@@ -19,7 +19,7 @@ func (h *Handler) PlayNowOnTV(c *gin.Context) {
 		return
 	}
 
-	err := h.tvService.PlayNowOnTV(ctx, request)
+	err := h.tvService.TvNowPlaying(ctx, request)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			c.JSON(http.StatusNoContent, gin.H{

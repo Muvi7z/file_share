@@ -24,7 +24,7 @@ const (
 const (
 	MsgTypeTVDevices           = "tv.devices"
 	MsgTypeOpenOnTV            = "tv.open"
-	MsgTypePlayNowOnTV         = "tv.playnow"
+	MsgTypeTVNowPlaying        = "tv.playing"
 	MsgTypeNotifyLibraryUpdate = "library.update"
 )
 
@@ -40,11 +40,16 @@ func NewHub() *Hub {
 	}
 }
 
-func (h *Hub) Register(_ context.Context, client *Client) {
+func (h *Hub) Register(ctx context.Context, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.clients[client.Device.Id] = client
 
+	old, exists := h.clients[client.Device.Id]
+
+	h.clients[client.Device.Id] = client
+	if exists {
+		h.Disconnect(ctx, old)
+	}
 	if client.Device.Type == entity.DeviceTypeTV {
 		go h.broadcastTVList()
 	} else {
@@ -53,18 +58,28 @@ func (h *Hub) Register(_ context.Context, client *Client) {
 
 }
 
-func (h *Hub) Unregister(_ context.Context, client *Client) {
+func (h *Hub) Unregister(ctx context.Context, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	_, exists := h.clients[client.Device.Id]
-	if exists {
-		delete(h.clients, client.Device.Id)
 
+	current, exists := h.clients[client.Device.Id]
+	if exists {
+		if current == client {
+			delete(h.clients, client.Device.Id)
+		}
 		if client.Device.Type == entity.DeviceTypeTV {
 			go h.broadcastTVList()
 		}
 	}
 
+}
+
+func (h *Hub) Disconnect(_ context.Context, client *Client) {
+	_, exists := h.clients[client.Device.Id]
+	if exists {
+		delete(h.clients, client.Device.Id)
+		_ = client.Conn.Close(websocket.StatusNormalClosure, "client disconnected")
+	}
 }
 
 func (h *Hub) Close() {
@@ -80,7 +95,7 @@ func (h *Hub) NotifyLibraryUpdated(ctx context.Context, entry entity.CmdUpdateLi
 	h.broadcast(ctx, entity.Message{
 		Type:    MsgTypeNotifyLibraryUpdate,
 		Payload: entry,
-	}, "-1")
+	}, "")
 }
 
 func (h *Hub) KeepAlive(ctx context.Context, conn *websocket.Conn) {
@@ -116,11 +131,11 @@ func (h *Hub) GetTVDevices(_ context.Context) []entity.Device {
 	return devices
 }
 
-func (h *Hub) broadcast(ctx context.Context, msg entity.Message, deliverId string) {
+func (h *Hub) broadcast(ctx context.Context, msg entity.Message, senderDeviceId string) {
 	h.mu.RLock()
 	targets := make([]*Client, 0, len(h.clients))
 	for _, client := range h.clients {
-		if deliverId != client.Device.Id {
+		if senderDeviceId != client.Device.Id {
 			targets = append(targets, client)
 		}
 	}
@@ -148,7 +163,7 @@ func (h *Hub) broadcastTVList() {
 	h.broadcast(ctx, entity.Message{
 		Type:    MsgTypeTVDevices,
 		Payload: h.GetTVDevices(ctx),
-	}, "-1")
+	}, "")
 }
 
 func (h *Hub) SentTVListTo(c *Client) {
@@ -161,9 +176,9 @@ func (h *Hub) SentTVListTo(c *Client) {
 	})
 }
 
-func (h *Hub) SendPlayNowOnTV(ctx context.Context, cmd entity.CmdPlayNowOnTV) error {
+func (h *Hub) SendTVNowPlaying(ctx context.Context, cmd entity.CmdPlayNowOnTV) error {
 	msg := entity.Message{
-		Type:    MsgTypePlayNowOnTV,
+		Type:    MsgTypeTVNowPlaying,
 		Payload: cmd,
 	}
 
